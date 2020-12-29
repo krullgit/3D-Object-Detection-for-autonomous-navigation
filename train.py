@@ -44,7 +44,7 @@ from load_data import dataLoader, DataBaseSamplerV2
 # metrics is currently not used
 # from libraries.metrics import update_metrics, Accuracy, PrecisionRecall, Scalar
 from libraries.eval_helper_functions import predict_kitti_to_anno, progressBar, send_3d_bbox, box_camera_to_lidar, remove_low_score
-from libraries.eval_helper_functions import create_out_dir_base, create_model_dirs_training, create_model_dirs_eval
+from libraries.train_helper_functions import create_out_dir_base, create_model_dirs_training, create_model_dirs_eval
 from model.voxelnet import VoxelNet
 from second.utils.eval import get_official_eval_result, get_coco_eval_result
 
@@ -827,7 +827,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
         if production_mode:
 
             dt_anno = remove_low_score(dt_anno[0], float(prediction_min_score))
-            #if len(dt_anno["score"]) > 0:
+            # if len(dt_anno["score"]) > 0:
             #    print(dt_anno["score"])
             dims = dt_anno['dimensions']
             loc = dt_anno['location']

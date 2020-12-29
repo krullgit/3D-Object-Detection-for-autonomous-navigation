@@ -412,6 +412,8 @@ def sendToRVIZ():
     assert(len(velodyne_data)>0)
     while not rospy.is_shutdown() and counter < len(velodyne_data):
 
+        rospy.sleep(0.0)
+
         try:
                 
             point_cloud = velodyne_data[counter]

@@ -4684,3 +4684,14 @@ scripts/dumpster/debug_rviz/points/voxels.pkl
 scripts/dumpster/rosbag/rosbag.py
 second/.vscode/launch.json
 second/.vscode/settings.json
+second/core/__pycache__/box_np_ops.cpython-36.pyc
+second/core/__pycache__/geometry.cpython-36.pyc
+second/core/non_max_suppression/__pycache__/__init__.cpython-36.pyc
+second/core/non_max_suppression/__pycache__/nms_cpu.cpython-36.pyc
+second/core/non_max_suppression/__pycache__/nms_gpu.cpython-36.pyc
+second/data/__pycache__/kitti_common.cpython-36.pyc
+second/utils/__pycache__/__init__.cpython-36.pyc
+second/utils/__pycache__/eval.cpython-36.pyc
+second/utils/__pycache__/find.cpython-36.pyc
+second/utils/__pycache__/loader.cpython-36.pyc
+libraries/__pycache__/train_helper_functions.cpython-36.pyc

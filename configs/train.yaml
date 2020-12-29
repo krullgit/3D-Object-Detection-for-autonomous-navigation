@@ -11,14 +11,14 @@ load_weights: True
 do_evaluate: True # If True, we will do an evaluation after each epoch during training 
 
 # eval general params
-measure_time: False
+measure_time: True
 measure_time_extended: False
 eval_model_id: "496" #  whats the name of the folder of the trained model
 eval_checkpoint: "/model_weights_21.h5" # Option: [model_weights_temp, model_weights_0] # which checkpoint of the model we want to use. The number in "model_weights_0" defines the epoch 
 # "no_annos_mode" in "eval_input_reader" must also be set
 
 # eval production_mode params
-production_mode: False # If true  we take new pointclouds from a realsense live stream
+production_mode: True # If true  we take new pointclouds from a realsense live stream
 prediction_min_score: 0.3 # this is only used in production_mode = True # removes prediction scores lower than x
 
 # input_reader general
@@ -40,7 +40,6 @@ train_input_reader:
   sample_max_nums: [2] # number of objects we want to randomly place inside the pointcloud 
   sampler_max_point_collision: 200 # maximum number of points in the point cloud the sampled object can overlap (take the same 3D space)
   sampler_min_point_collision: 1 # minumum number of points in the point cloud the sampled object must overlap (take the same 3D space)
-
 
   desired_objects : ["Pedestrian"] # these are the object we consoider in out dataloader pipeline
 
