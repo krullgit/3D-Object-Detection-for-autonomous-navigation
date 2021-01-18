@@ -3938,7 +3938,6 @@ out/model_496/out_dir_checkpoints/model_weights_17.h5
 out/model_496/out_dir_checkpoints/model_weights_18.h5
 out/model_496/out_dir_checkpoints/model_weights_19.h5
 out/model_496/out_dir_checkpoints/model_weights_20.h5
-out/model_496/out_dir_checkpoints/model_weights_21.h5
 out/model_496/out_dir_checkpoints/model_weights_22.h5
 out/model_496/out_dir_checkpoints/model_weights_23.h5
 out/model_496/out_dir_checkpoints/model_weights_24.h5
@@ -4695,3 +4694,4 @@ second/utils/__pycache__/eval.cpython-36.pyc
 second/utils/__pycache__/find.cpython-36.pyc
 second/utils/__pycache__/loader.cpython-36.pyc
 libraries/__pycache__/train_helper_functions.cpython-36.pyc
+second/utils/__pycache__/test.cpython-36.pyc
