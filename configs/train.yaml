@@ -11,7 +11,7 @@ load_weights: True
 do_evaluate: True # If True, we will do an evaluation after each epoch during training 
 
 # eval general params
-measure_time: True
+measure_time: False
 measure_time_extended: False
 eval_model_id: "496" #  whats the name of the folder of the trained model
 eval_checkpoint: "/model_weights_21.h5" # Option: [model_weights_temp, model_weights_0] # which checkpoint of the model we want to use. The number in "model_weights_0" defines the epoch 
@@ -138,8 +138,8 @@ model:
     post_center_limit_range: [0, -9.92, -3.0, 23.68, 9.92, 3.0]
     use_rotate_nms: false # Only false is implemented
     use_multi_class_nms: false # true is not implemented yet
-    nms_pre_max_size: 10 # maximum number of prediction go to nms
-    nms_post_max_size: 300 # maximum number of prediction out from nms
+    nms_pre_max_size: 100 # maximum number of prediction go to nms
+    nms_post_max_size: 50 # maximum number of prediction out from nms
     nms_score_threshold: 0.0 # minimum prediction probability, everything below is deleted # is set to 0.0 since the implentation is slow
     nms_iou_threshold: 0.5 # if 2D iou from first prediction to other prediction is greater than this the other prediction(s) gets deleted (regular nms logic)
     num_point_features: 3 # Options[3,4] # 4 for Kitti, 3 for custom 

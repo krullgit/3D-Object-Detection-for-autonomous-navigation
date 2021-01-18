@@ -1240,7 +1240,7 @@ class VoxelNet(tf.keras.Model):
                 # only keep the top n score predictions
                 # ------------------------------------------------------------------------------------------------------
 
-                top_n_scores = np.argpartition(top_scores, -10)[-10:]
+                top_n_scores = np.argpartition(top_scores, -100)[-100:]
                 top_scores = top_scores[[top_n_scores]]
                 box_preds = box_preds[[top_n_scores]]
                 anchors = anchors[[top_n_scores]]
@@ -1392,10 +1392,7 @@ class VoxelNet(tf.keras.Model):
                 # box_corners = center_to_corner_box3d(
                 #     locs, dims, angles, camera_box_origin, axis=1)
 
-                # # debug
-                # t_box_corners = time.time() - t_box_corners
-                # #print("# t_box_corners time: {}".format(round(t_box_corners,3)))
-                # t_box_corners_in_image = time.time()
+            
 
                 # # ------------------------------------------------------------------------------------------------------
                 # # get the 8 2D corners (x,y) of the bboxes projected to the image plane
@@ -1405,21 +1402,22 @@ class VoxelNet(tf.keras.Model):
                 # box_corners_in_image = project_to_image(
                 #     box_corners, P2) # [N, 8, 2]
 
-                # # debug
-                # t_box_corners_in_image = time.time() - t_box_corners_in_image
-                # #print("# t_box_corners_in_image time: {}".format(round(t_box_corners_in_image,3)))
-                # t_block5 = time.time()
-                # #print("# SUM ALL FUNCTIONS time: {}".format(round(t_box_corners_in_image+t_box_corners+t_final_box_preds_camera+t_selected+t_boxes_for_nms+t_center_to_corner_box2d+t_second_box_decode,3)))
 
                 # # ------------------------------------------------------------------------------------------------------
                 # # get the 2 2D corners (x,y) of the bboxes projected to the image plane
                 # # ------------------------------------------------------------------------------------------------------
 
-                # minxy = tf.reduce_min(box_corners_in_image, axis=1) # [N, 2]
-                # maxxy = tf.reduce_max(box_corners_in_image, axis=1) # [N, 2]
-                # box_2d_preds = tf.concat([minxy, maxxy], axis=1)
+                # minxy = np.min(box_corners_in_image, axis=1) # [N, 2]
+                # maxxy = np.min(box_corners_in_image, axis=1) # [N, 2]
+                # box_2d_preds = np.concatenate([minxy, maxxy], axis=1)
+
+                box_2d_preds_fake = []
+
+                for i in angles:
+                    box_2d_preds_fake.append([400., 200., 500., 400.])
 
                 predictions_dict = {
+                    "bbox": np.array(box_2d_preds_fake),
                     "box3d_camera": final_box_preds_camera,
                     "box3d_lidar": final_box_preds,
                     "scores": final_scores,

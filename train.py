@@ -799,6 +799,8 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
 
         if measure_time: t_predict = current_milli_time()
 
+        # t_full_sample: 23.91, t_preprocess: 0.85, t_network: 12.54, t_predict: 10.46, t_anno: 0.84, t_rviz: 0.0
+        # t_full_sample: 23.54, t_preprocess: 1.13, t_network: 11.08, t_predict: 11.45, t_anno: 0.82, t_rviz: 0.01
         predictions_dicts = net.predict(example,preds_dict) # list(predictions) of ['name', 'truncated', 'occluded', 'alpha', 'bbox', 'dimensions', 'location', 'rotation_y', 'score', 'image_idx'])
 
         if measure_time:
@@ -812,7 +814,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
         
         if measure_time: t_anno = current_milli_time()
 
-        dt_anno = predict_kitti_to_anno(example, desired_objects, predictions_dicts, center_limit_range, False)
+        dt_anno = predict_kitti_to_anno(example, desired_objects, predictions_dicts, None, False)
 
         if measure_time:
             t_anno = current_milli_time() -t_anno
@@ -906,7 +908,8 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     # - Input: dt_annos, gt_annos are in camera coors (in Lidar expression: (-y,-z,x))
     # ------------------------------------------------------------------------------------------------------
 
-    compute_bbox = False # Since we dont have 2D box ground truth we don want to compute 2D bboxes results 
+    compute_bbox = False # Since we dont have 2D box ground truth we don want to compute 2D bboxes results
+
     result1, mAPbbox, mAPbev, mAP3d, mAPaos = get_official_eval_result(gt_annos, dt_annos, desired_objects, compute_bbox = compute_bbox) 
 
     # ------------------------------------------------------------------------------------------------------
@@ -939,14 +942,13 @@ if __name__ == '__main__':
     fire.Fire()
     
 
-
-
-
-
-
-
-
-
-
-
-
+# Pedestrian AP@0.50, 0.50, 0.50:
+# bbox AP:0.00, 0.00, 0.00
+# bev  AP:99.10, 99.10, 99.10
+# 3d   AP:98.66, 98.66, 98.66
+# aos  AP:57.04, 57.04, 57.04
+# Pedestrian AP@0.50, 0.25, 0.25:
+# bbox AP:0.00, 0.00, 0.00
+# bev  AP:99.33, 99.33, 99.33
+# 3d   AP:99.33, 99.33, 99.33
+# aos  AP:57.28, 57.28, 57.28

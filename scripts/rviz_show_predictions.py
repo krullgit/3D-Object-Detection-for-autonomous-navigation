@@ -291,7 +291,7 @@ def sendToRVIZ():
     #giving some time for the publisher to register
     rospy.sleep(0.1)
     counter = 0
-    prediction_min_score = 0.3
+    prediction_min_score = 0.1
 
     # ------------------------------------------------------------------------------------------------------
     # set parameter
@@ -299,7 +299,7 @@ def sendToRVIZ():
 
     show_annotations = True
     show_ground_truth = True
-    mode = "live" # Options: live, training_unsampled, testing_sampled, testing_unsampled, gt_database_val, gt_database
+    mode = "testing_sampled" # Options: live, training_unsampled, testing_sampled, testing_unsampled, gt_database_val, gt_database
     # training_sampled is not here since the sampling is done during training, to see that you have to use the 
     # "save" param in "load_data.py" and "send_to_rviz.py"
 
@@ -307,7 +307,7 @@ def sendToRVIZ():
     # Load Pointcloud ground truths
     # ------------------------------------------------------------------------------------------------------
 
-    if mode == "training_unsampled":
+    if mode == "testing_unsampled":
         # load gt
         with open("/home/makr/Documents/data/pedestrian_3d_own/1/object/kitti_infos_val.pkl", "rb") as file: 
             kitti_infos = pickle.load(file)
@@ -327,6 +327,10 @@ def sendToRVIZ():
         #    thesis_eval_dict = pickle.load(file)
         with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_411/out_dir_eval_results/result_epoch_16.pkl", "rb") as file: 
            thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_411/out_dir_eval_results/result.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_496/out_dir_eval_results/result.pkl", "rb") as file: 
+        #    thesis_eval_dict = pickle.load(file)
         # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_420/out_dir_eval_results/result_epoch_21.pkl", "rb") as file: 
         #    thesis_eval_dict = pickle.load(file)
         # load point clouds

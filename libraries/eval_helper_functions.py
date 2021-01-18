@@ -26,6 +26,7 @@ from scipy.spatial.transform import Rotation as R
 
 from libraries.metrics import update_metrics, Accuracy, PrecisionRecall, Scalar
 import second.data.kitti_common as kitti
+from load_data import center_to_corner_box3d
 
 
 # convert camera to lidar coords
@@ -188,6 +189,7 @@ def predict_kitti_to_anno(example,
             # convert to numpy 
             # ------------------------------------------------------------------------------------------------------
 
+            box_preds_2d = preds_dict["bbox"]
             box_preds = preds_dict["box3d_camera"]
             scores = preds_dict["scores"]
             box_preds_lidar = preds_dict["box3d_lidar"]
@@ -206,8 +208,8 @@ def predict_kitti_to_anno(example,
             # t_full_sample: 43.23, t_preprocess: 0.58, t_network: 10.5, t_predict: 31.84, t_anno: 0.8, t_rviz: 0.0
             
             num_example = 0
-            for box, box_lidar, score, label in zip(
-                    box_preds, box_preds_lidar, scores,
+            for box_2d, box, box_lidar, score, label in zip(
+                    box_preds_2d, box_preds, box_preds_lidar, scores,
                     label_preds):
                 
                 # ------------------------------------------------------------------------------------------------------
@@ -226,6 +228,7 @@ def predict_kitti_to_anno(example,
                 # ------------------------------------------------------------------------------------------------------
                 
                 anno["name"].append(class_names[int(label)]) 
+                anno["bbox"].append(box_2d) 
                 anno["truncated"].append(0.0) # Fill up with 0 since the prediction does not know if its truncated
                 anno["occluded"].append(0) # Fill up with 0 since the prediction does not know if its occluded
                 anno["alpha"].append(-np.arctan2(-box_lidar[1], box_lidar[0]) +
@@ -270,6 +273,7 @@ def predict_kitti_to_anno(example,
 def get_start_result_anno():
     annotations = {}
     annotations.update({
+        'bbox': [],
         'name': [],
         'truncated': [],
         'occluded': [],
@@ -731,31 +735,31 @@ def box_lidar_to_camera(data, r_rect, velo2cam):
     xyz = lidar_to_camera(xyz_lidar, r_rect, velo2cam)
     return np.concatenate([xyz, l, h, w, r], axis=1)
 
-def center_to_corner_box3d(centers,
-                           dims,
-                           angles,
-                           origin=[0.5, 1.0, 0.5],
-                           axis=1):
-    """convert kitti locations, dimensions and angles to corners
+# def center_to_corner_box3d(centers,
+#                            dims,
+#                            angles,
+#                            origin=[0.5, 1.0, 0.5],
+#                            axis=1):
+#     """convert kitti locations, dimensions and angles to corners
     
-    Args:
-        centers (float array, shape=[N, 3]): locations in kitti label file.
-        dims (float array, shape=[N, 3]): dimensions in kitti label file.
-        angles (float array, shape=[N]): rotation_y in kitti label file.
-        origin (list or array or float): origin point relate to smallest point.
-            use [0.5, 1.0, 0.5] in camera and [0.5, 0.5, 0] in lidar.
-        axis (int): rotation axis. 1 for camera and 2 for lidar.
-    Returns:
-        [type]: [description]
-    """
-    # 'length' in kitti format is in x axis.
-    # yzx(hwl)(kitti label file)<->xyz(lhw)(camera)<->z(-x)(-y)(wlh)(lidar)
-    # center in kitti format is [0.5, 1.0, 0.5] in xyz.
-    corners = corners_nd(dims, origin=origin)
-    # corners: [N, 8, 3]
-    corners = rotation_3d_in_axis(corners, angles, axis=axis)
-    corners += tf.reshape(centers,(-1, 1, 3))
-    return corners
+#     Args:
+#         centers (float array, shape=[N, 3]): locations in kitti label file.
+#         dims (float array, shape=[N, 3]): dimensions in kitti label file.
+#         angles (float array, shape=[N]): rotation_y in kitti label file.
+#         origin (list or array or float): origin point relate to smallest point.
+#             use [0.5, 1.0, 0.5] in camera and [0.5, 0.5, 0] in lidar.
+#         axis (int): rotation axis. 1 for camera and 2 for lidar.
+#     Returns:
+#         [type]: [description]
+#     """
+#     # 'length' in kitti format is in x axis.
+#     # yzx(hwl)(kitti label file)<->xyz(lhw)(camera)<->z(-x)(-y)(wlh)(lidar)
+#     # center in kitti format is [0.5, 1.0, 0.5] in xyz.
+#     corners = corners_nd(dims, origin=origin)
+#     # corners: [N, 8, 3]
+#     corners = rotation_3d_in_axis(corners, angles, axis=axis)
+#     corners += tf.reshape(centers,(-1, 1, 3))
+#     return corners
 
 def rotation_3d_in_axis(points, angles, axis=0):
     # points: [N, point_size, 3]
@@ -787,13 +791,22 @@ def rotation_3d_in_axis(points, angles, axis=0):
 
     return tf.einsum('aij,jka->aik', points, rot_mat_T)
 
+# def project_to_image(points_3d, proj_mat):
+#     points_num = list(points_3d.shape)[:-1]
+#     points_shape = np.concatenate([points_num, [1]], axis=0).tolist()
+#     points_4 = tf.concat(
+#         [points_3d, tf.zeros((points_shape[0],points_shape[1],points_shape[2]),points_3d.dtype)], axis=-1)
+#     # point_2d = points_4 @ tf.transpose(proj_mat, [1, 0])
+#     point_2d = tf.matmul(points_4, tf.transpose(proj_mat))
+#     point_2d_res = point_2d[..., :2] / point_2d[..., 2:3]
+#     return point_2d_res
+
+
 def project_to_image(points_3d, proj_mat):
-    points_num = list(points_3d.shape)[:-1]
-    points_shape = np.concatenate([points_num, [1]], axis=0).tolist()
-    points_4 = tf.concat(
-        [points_3d, tf.zeros((points_shape[0],points_shape[1],points_shape[2]),points_3d.dtype)], axis=-1)
-    # point_2d = points_4 @ tf.transpose(proj_mat, [1, 0])
-    point_2d = tf.matmul(points_4, tf.transpose(proj_mat))
+    points_shape = list(points_3d.shape)
+    points_shape[-1] = 1
+    points_4 = np.concatenate([points_3d, np.zeros(points_shape)], axis=-1)
+    point_2d = points_4 @ proj_mat.T
     point_2d_res = point_2d[..., :2] / point_2d[..., 2:3]
     return point_2d_res
 

@@ -692,56 +692,22 @@ def do_eval_v2(gt_annos,
                current_classes,
                min_overlaps,
                compute_aos=False,
-               difficultys = [0, 1, 2],
-               compute_bbox=True):
+               difficultys = [0, 1, 2]):
     # min_overlaps: [num_minoverlap, metric, num_class]
-
-    # ------------------------------------------------------------------------------------------------------
-    # do 2D evaluation
-    # ------------------------------------------------------------------------------------------------------
-
-    if compute_bbox:
-        ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 0,
+    ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 0,
                         min_overlaps, compute_aos)
-        # ret: [num_class, num_diff, num_minoverlap, num_sample_points]
-        mAP_bbox = get_mAP_v2(ret["precision"])
-    else:
-        mAP_bbox = None
-
-
-    # ------------------------------------------------------------------------------------------------------
-    # do BEV evaluation
-    # ------------------------------------------------------------------------  ------------------------------
-
-    ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 1,
-                        min_overlaps, compute_aos)
-    mAP_bev = get_mAP_v2(ret["precision"])
-
-    # ------------------------------------------------------------------------------------------------------
-    # do AOS evaluation
-    # ------------------------------------------------------------------------------------------------------
-
+    # ret: [num_class, num_diff, num_minoverlap, num_sample_points]
+    mAP_bbox = get_mAP_v2(ret["precision"])
     mAP_aos = None
     if compute_aos:
         mAP_aos = get_mAP_v2(ret["orientation"])
-
-    # ------------------------------------------------------------------------------------------------------
-    # do 3D evaluation
-    # ------------------------------------------------------------------------------------------------------
-
+    ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 1,
+                        min_overlaps)
+    mAP_bev = get_mAP_v2(ret["precision"])
     ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 2,
                         min_overlaps)
     mAP_3d = get_mAP_v2(ret["precision"])
-
-    
-
-    # ------------------------------------------------------------------------------------------------------
-    # return mAP
-    # ------------------------------------------------------------------------------------------------------
-
     return mAP_bbox, mAP_bev, mAP_3d, mAP_aos
-
-    
 
 
 def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
@@ -750,8 +716,7 @@ def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
     min_overlaps = np.zeros([10, *overlap_ranges.shape[1:]])
     for i in range(overlap_ranges.shape[1]):
         for j in range(overlap_ranges.shape[2]):
-
-            min_overlaps[:, i, j] = np.linspace(overlap_ranges[:, i, j][0],overlap_ranges[:, i, j][1],int(overlap_ranges[:, i, j][2]))
+            min_overlaps[:, i, j] = np.linspace(*overlap_ranges[:, i, j])
     mAP_bbox, mAP_bev, mAP_3d, mAP_aos = do_eval_v2(
         gt_annos, dt_annos, current_classes, min_overlaps, compute_aos)
     # ret: [num_class, num_diff, num_minoverlap]
@@ -823,20 +788,13 @@ def get_official_eval_result_v1(gt_annos, dt_annos, current_class):
     return result
 
 
-def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0, 1, 2], return_data=True, compute_bbox=True):
-    
-    # ------------------------------------------------------------------------------------------------------
-    # Specify the overlaps between the gt and predictions which needs to be achieved
-    # - following, overlap_0_7 and overlap_0_5 specify 2 separate evaluations
-    # - in each of those: columns are classes and rows are [bbox,bev,3D]
-    # ------------------------------------------------------------------------------------------------------
-    
-    overlap_0_7 = np.array([[0.7, 0.75, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
-                            [0.7, 0.55, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
-                            [0.7, 0.55, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7]])
-    overlap_0_5 = np.array([[0.7, 0.9, 0.5, 0.7, 0.5, 0.5, 0.5, 0.5],
-                            [0.5, 0.7, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5],
-                            [0.5, 0.7, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5]])
+def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0, 1, 2]):
+    overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7,
+                             0.5, 0.7, 0.7, 0.7], [0.7, 0.5, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.5, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7]])
+    overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7,
+                             0.5, 0.5, 0.5, 0.5], [0.5, 0.25, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5],
+                            [0.5, 0.25, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5]])
     min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
     class_to_name = {
         0: 'Car',
@@ -868,7 +826,7 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0
                 compute_aos = True
             break
     mAPbbox, mAPbev, mAP3d, mAPaos = do_eval_v2(
-        gt_annos, dt_annos, current_classes, min_overlaps, compute_aos, difficultys, compute_bbox=compute_bbox)
+        gt_annos, dt_annos, current_classes, min_overlaps, compute_aos, difficultys)
     for j, curcls in enumerate(current_classes):
         # mAP threshold array: [num_minoverlap, metric, class]
         # mAP result: [num_class, num_diff, num_minoverlap]
@@ -876,10 +834,9 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0
             result += print_str(
                 (f"{class_to_name[curcls]} "
                  "AP@{:.2f}, {:.2f}, {:.2f}:".format(*min_overlaps[i, :, j])))
-            if compute_bbox:
-                result += print_str((f"bbox AP:{mAPbbox[j, 0, i]:.2f}, "
-                                    f"{mAPbbox[j, 1, i]:.2f}, "
-                                    f"{mAPbbox[j, 2, i]:.2f}"))
+            result += print_str((f"bbox AP:{mAPbbox[j, 0, i]:.2f}, "
+                                 f"{mAPbbox[j, 1, i]:.2f}, "
+                                 f"{mAPbbox[j, 2, i]:.2f}"))
             result += print_str((f"bev  AP:{mAPbev[j, 0, i]:.2f}, "
                                  f"{mAPbev[j, 1, i]:.2f}, "
                                  f"{mAPbev[j, 2, i]:.2f}"))
@@ -890,11 +847,8 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0
                 result += print_str((f"aos  AP:{mAPaos[j, 0, i]:.2f}, "
                                      f"{mAPaos[j, 1, i]:.2f}, "
                                      f"{mAPaos[j, 2, i]:.2f}"))
-    if return_data:
-        return result, mAPbbox, mAPbev, mAP3d, mAPaos
-    else:
-        return result
 
+    return result
 
 def get_coco_eval_result(gt_annos, dt_annos, current_classes):
     class_to_name = {
