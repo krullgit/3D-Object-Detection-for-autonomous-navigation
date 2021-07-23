@@ -193,7 +193,7 @@ def train(config_path):
     # ------------------------------------------------------------------------------------------------------
     #  We wrap a training step in a tf.function to to gain speedups (5x)
     # ------------------------------------------------------------------------------------------------------ 
-
+    
     max_number_of_points_per_voxel = config["model"]["second"]["voxel_generator"]["max_number_of_points_per_voxel"]
     
     @tf.function(input_signature = [tf.TensorSpec(shape=[None,max_number_of_points_per_voxel,num_point_features], dtype=tf.float32),tf.TensorSpec(shape=[None,], dtype=tf.int32),tf.TensorSpec(shape=[None,4], dtype=tf.int32),tf.TensorSpec(shape=[None,None,7], dtype=tf.float32),tf.TensorSpec(shape=[None,None], dtype=tf.int32),tf.TensorSpec(shape=[None,None,7], dtype=tf.float32)])
@@ -203,16 +203,18 @@ def train(config_path):
             # Pass to Network
             ret_dict = net(voxels,num_points,coors,batch_anchors,labels,reg_targets)
 
-            # Grap different Network Returns
-            cls_preds = ret_dict["cls_preds"]
-            loss = tf.reduce_mean(ret_dict["loss"])
-            cls_loss_reduced = tf.reduce_mean(ret_dict["cls_loss_reduced"])
-            loc_loss_reduced = tf.reduce_mean(ret_dict["loc_loss_reduced"])
+            # Get loss for optimization
+            loss = ret_dict["loss"]
+            
+            # Get other returns from network that might be interesting for debugging
+            cls_loss = ret_dict["cls_loss"]
+            loc_loss = ret_dict["loc_loss"]
             cls_pos_loss = ret_dict["cls_pos_loss"]
             cls_neg_loss = ret_dict["cls_neg_loss"]
-            loc_loss = ret_dict["loc_loss"]
-            cls_loss = ret_dict["cls_loss"]
+            cls_preds = ret_dict["cls_preds"]
             dir_loss_reduced = ret_dict["dir_loss_reduced"]
+            cls_loss_reduced = ret_dict["cls_loss_reduced"]
+            loc_loss_reduced = ret_dict["loc_loss_reduced"]
             cared = ret_dict["cared"] 
  
         #Compute gradients
@@ -670,7 +672,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     
     max_number_of_points_per_voxel = config["model"]["second"]["voxel_generator"]["max_number_of_points_per_voxel"] 
 
-    @tf.function(input_signature = [tf.TensorSpec(shape=[None,max_number_of_points_per_voxel,num_point_features], dtype=tf.float32),tf.TensorSpec(shape=[None,], dtype=tf.int32),tf.TensorSpec(shape=[None,4], dtype=tf.int32),tf.TensorSpec(shape=[None,None,7], dtype=tf.float32)])
+    # @tf.function(input_signature = [tf.TensorSpec(shape=[None,max_number_of_points_per_voxel,num_point_features], dtype=tf.float32),tf.TensorSpec(shape=[None,], dtype=tf.int32),tf.TensorSpec(shape=[None,4], dtype=tf.int32),tf.TensorSpec(shape=[None,None,7], dtype=tf.float32)])
     def trainStep(voxels,num_points,coors,batch_anchors):
         preds_dict = net(voxels,num_points,coors,batch_anchors)
         return preds_dict

@@ -13,7 +13,7 @@ This implementation:
     - create and annotate your own dataset (train + eval) with the d435i,
     - train and eval on this datatset,
     - put the model into production where it fetches ROS messages from the d435i and publishes the detections to another ROS topic.
-- is fully implemented in Tensorflow,
+- uses Tensorflow,
 - can be converted to a tflite model to run faster on edge devices,
 - is currentely unique in its ability to detect pedestians on the d435i sensor, 
 - works on arbitrary videos with multiple people,
@@ -73,11 +73,11 @@ If you have a Realsense d435i sensor you can simply run inference on its ROS out
 1. Start pipeline:
     - ```python train.py evaluate configs/train.yaml```
 1. Now you should see the pointcloud of the sensor and 3D detections in RVIZ (like [this](#3D-Object-Detection-for-Pedestrian-with-Pointpillars,-Tensorflow,-Intel-Realsense-d435i))
+    - predictions of type "BoundingBoxArray" are published to the topic "bb_pred_guess_1"
 
 # Create Datasets
 
 It's possible to create our your dataset, if you want to train for a different type of objects. Therefore, we simply record pointclouds from the realsense sensor and save annotation files along with the pointclouds. However, to skip all the time consuming annotation work, we use a simple approach by placing the object in predefined locations with different (also predefined) rotations (in total 8 rotations, rotated by 45 degree each time and covering 360 degrees in total). This procedure can be repeated for multiple scenes to increase the variety in the training data. The following section examines this concept.
-
 
 
 ## 1. Capture Data with Annotations (for training and testing)
