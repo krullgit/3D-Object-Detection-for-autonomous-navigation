@@ -29,8 +29,10 @@ from sensor_msgs.msg import PointCloud2 as msg_PointCloud2
 from datetime import datetime
 from scipy.spatial.transform import Rotation as R
 from sensor_msgs import point_cloud2
+from jsk_recognition_msgs.msg import BoundingBoxArray
+from jsk_recognition_msgs.msg import BoundingBox
 
-
+from libraries.eval_helper_functions import send_3d_bbox
 ####
 # TargetAssigner
 ####
@@ -47,7 +49,7 @@ def points_in_rbbox(points, rbbox, lidar=True):
     origin = [0.5, 0.5, 0]
     rbbox_corners = center_to_corner_box3d(
         rbbox[:, :3], rbbox[:, 3:6], rbbox[:, 6], origin=origin, axis=2)
-    surfaces = corner_to_surfaces_3d(rbbox_corners)
+    surfaces = corner_to_surfaces_3d_jit(rbbox_corners)
     indices = points_in_convex_polygon_3d_jit(points[:, :3], surfaces)
     return indices
 
@@ -979,7 +981,7 @@ def _rotation_matrix_3d_(rot_mat_T, angle, axis):
         rot_mat_T[2, 1] = rot_sin
         rot_mat_T[2, 2] = rot_cos
 
-@numba.jit(nopython=False)
+#@numba.jit(nopython=False)
 def surface_equ_3d_jit(polygon_surfaces):
     # return [a, b, c], d in ax+by+cz+d=0
     # polygon_surfaces: [num_polygon, num_surfaces, num_points_of_polygon, 3]
@@ -1284,7 +1286,7 @@ class BatchSampler:
         self._epoch = epoch
         self._epoch_counter = 0
         self._drop_reminder = drop_reminder
-        self.random_translate()
+        self.random_translate() # scatter the samples 
 
     # get n(num) sample indices
     #============================================================
@@ -1313,15 +1315,24 @@ class BatchSampler:
         return [self._sampled_list[i] for i in indices]
         # return np.random.choice(self._sampled_list, num)
 
-    # randomly translae the sampled bounding boxes that they do not collide with each other (a least less probable)
+    # randomly translate the sampled bounding boxes that they do not collide with each other (at least less likely)
     # =========================================
     def random_translate(self):
-        groundtruth_localization_noise_std_x= [0.20]
-        groundtruth_localization_noise_std_y= [1.25]
+        # set translation noise intervals
+        noise_x= [0,0]
+        noise_y= [-1.25, 1.25]
         for i, sample in enumerate(self._sampled_list):
+            # get the x distance to camera
+            sample_x_distance = self._sampled_list[i]["box3d_lidar"][0]
+            # if x distance is smaller than 2.5, translate rather todards the camera
+            if sample_x_distance < 2.5:
+                noise_x= [-1.5,+0.2]
+            # if x distance is greater than 2.5, translate rather away from the camera
+            if sample_x_distance >= 2.5:
+                noise_x= [-0.2,+1.0]
             loc_noises = np.zeros(len(sample["box3d_lidar"])) 
-            loc_noises[0] = loc_noises[0] + np.random.normal(scale=groundtruth_localization_noise_std_x, size=[1]) # x
-            loc_noises[1] = loc_noises[1] + np.random.normal(scale=groundtruth_localization_noise_std_y, size=[1]) # y
+            loc_noises[0] = loc_noises[0] + random.uniform(noise_x[0], noise_x[1]) # x
+            loc_noises[1] = loc_noises[1] + random.uniform(noise_y[0], noise_y[1]) # y
             self._sampled_list[i]["box3d_lidar"] = self._sampled_list[i]["box3d_lidar"] + loc_noises
             #self._sampled_list[i]["box3d_lidar"] = self._sampled_list[i]["box3d_lidar"] + [1,0,1,0,0,0,0]
 
@@ -1377,10 +1388,11 @@ class DataBaseSamplerV2:
                 self._sample_classes += group_names
                 self._sample_max_nums += list(group_info.values())
 
+        # this variable will hold for every class a BatchSampler object which generates samples
         self._sampler_dict = {}
         for k, v in self._group_db_infos.items():
             self._sampler_dict[k] = BatchSampler(v, k)
-
+        
 
 
 # We are removing all the annos from image_anno which are not in the list "desired_objects"
@@ -1410,12 +1422,18 @@ def camera_to_lidar(points, r_rect, velo2cam):
     # return only not homo coords
     return lidar_points[..., :3]
 
+
 def box_camera_to_lidar(data, r_rect, velo2cam):
+    
     xyz = data[:, 0:3]
+       
     l, h, w = data[:, 3:4], data[:, 4:5], data[:, 5:6]
     r = data[:, 6:7]
     # project from camera space to lidar space
     xyz_lidar = camera_to_lidar(xyz, r_rect, velo2cam)
+    
+    # return lidar coord position and convert lhw(camera coord) size to hwl(lidar coord) size
+    # RECALL ANNOTATIONS: yzx(hwl)(kitti label file)<->xyz(lhw)(camera)<->z(-x)(-y)(wlh)(lidar)
     return np.concatenate([xyz_lidar, w, l, h, r], axis=1)
 
 def lidar_to_camera(points, r_rect, velo2cam):
@@ -1608,11 +1626,7 @@ def sample_all(sampler_class,
             sampler_max_point_collision,
             sampler_min_point_collision,
             points,
-            random_crop=False,
-            gt_group_ids=None,
-            rect=None,
-            Trv2c=None,
-            P2=None):
+            random_crop=False):
 
 
     # ------------------------------------------------------------------------------------------------------ 
@@ -1646,8 +1660,10 @@ def sample_all(sampler_class,
     for class_name, sampled_num in zip(sampled_groups, sample_num_per_class):
         
         # ------------------------------------------------------------------------------------------------------
-        # if in this sample group name mnore than zero samples are req.
+        # if in this sample group name more than zero samples are req.
         # ------------------------------------------------------------------------------------------------------
+        
+        sampled_num = random.randint(0, sampled_num) 
 
         if sampled_num > 0:
             
@@ -1760,17 +1776,29 @@ def sample_all(sampler_class,
                     s_points[:, :3] += info["box3d_lidar"][:3] # move the bbox in the correct position (it was centered in the file)
                     
                     # ------------------------------------------------------------------------------------------------------
-                    # Apply random trunctation
+                    # Apply random trunctation in height to simulate when the object is near to camera and therefore outside the image boundaries
                     # ------------------------------------------------------------------------------------------------------
                     
-                    points_z_mean = np.mean(s_points[:,2])
-                    points_z_max = np.max(s_points[:,2])
-                    points_z_min = np.min(s_points[:,2])
-                    points_z_max_new = points_z_max - (np.random.uniform()*points_z_mean/3)
-                    points_z_min_new = points_z_min + (np.random.uniform()*points_z_mean/3)
-                    max_filter = s_points[:,2] < points_z_max_new 
-                    min_filter = s_points[:,2] > points_z_min_new 
-                    s_points = s_points[np.logical_and(max_filter,min_filter)]
+                    sample_height_half = info["box3d_lidar"][5]/2.0 # get half size of sample
+                    sample_distance = math.sqrt(abs(info["box3d_lidar"][0])**2 + abs(info["box3d_lidar"][1])**2) # distance to camera
+                    truncation_weight = (2.5-sample_distance)/2.5 # calc the intensity of truncation (truncation TRUE, if sample closer than X)
+                    if(truncation_weight>0):
+                        points_z_max = np.max(s_points[:,2])
+                        points_z_min = np.min(s_points[:,2])
+                        points_z_max_new = points_z_max - sample_height_half*truncation_weight
+                        points_z_min_new = points_z_min + sample_height_half*truncation_weight
+                        max_filter = s_points[:,2] < points_z_max_new 
+                        min_filter = s_points[:,2] > points_z_min_new 
+                        s_points = s_points[np.logical_and(max_filter,min_filter)]
+                    
+                    # points_z_mean = np.mean(s_points[:,2])
+                    # points_z_max = np.max(s_points[:,2])
+                    # points_z_min = np.min(s_points[:,2])
+                    # points_z_max_new = points_z_max - (np.random.uniform()*points_z_mean/3)
+                    # points_z_min_new = points_z_min + (np.random.uniform()*points_z_mean/3)
+                    # max_filter = s_points[:,2] < points_z_max_new 
+                    # min_filter = s_points[:,2] > points_z_min_new 
+                    # s_points = s_points[np.logical_and(max_filter,min_filter)]
 
                     
 
@@ -1808,13 +1836,20 @@ def sample_all(sampler_class,
 
 # debug purpose
 # ==================================================
-def debug_save_points_func(points, gt_boxes):
-    with open(os.getcwd() + "/scripts/debug_rviz/points/points.pkl", 'wb') as file:
-        pickle.dump(np.array(points), file, 2)
-    origin = [0.5, 0.5, 0]
-    gt_boxes_corners = center_to_corner_box3d(gt_boxes[:, :3], gt_boxes[:, 3:6], gt_boxes[:, 6], origin=origin, axis=2)
-    with open(os.getcwd() + "/scripts/debug_rviz/points/bbox.pkl", 'wb') as file:
-        pickle.dump(np.array(gt_boxes_corners), file, 2)
+# def debug_save_points_func(points, gt_boxes, message):
+    
+#     self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+    
+    # ------------------------------------------------------------------------------------------------------ 
+    #  old functionality of this function
+    # ------------------------------------------------------------------------------------------------------
+    
+    # with open(os.getcwd() + "/scripts/debug_rviz/points/points.pkl", 'wb') as file:
+    #     pickle.dump(np.array(points), file, 2)
+    # origin = [0.5, 0.5, 0]
+    # gt_boxes_corners = center_to_corner_box3d(gt_boxes[:, :3], gt_boxes[:, 3:6], gt_boxes[:, 6], origin=origin, axis=2)
+    # with open(os.getcwd() + "/scripts/debug_rviz/points/bbox.pkl", 'wb') as file:
+    #     pickle.dump(np.array(gt_boxes_corners), file, 2)
 
 
 # This is the class which holds the functions to get the dataloader
@@ -1824,9 +1859,7 @@ class dataLoader():
     def __init__(self, training, sampler_class, config, sample_val_dataset_mode=False, no_annos_mode=False, iterate_samples_in_debug_mode=False):
      
         
-        # ------------------------------------------------------------------------------------------------------ 
-        #  get different configs
-        # ------------------------------------------------------------------------------------------------------
+        
 
 
         self.config = config
@@ -1881,13 +1914,17 @@ class dataLoader():
             with open(self.img_list_and_infos_path, 'rb') as f:
                 self.img_list_and_infos = pickle.load(f)
                 if self.training:
-                    self.img_list_and_infos = self.img_list_and_infos #[:2500] #LIMIT
+                    self.img_list_and_infos = self.img_list_and_infos[:2500] #LIMIT
         else:
             velodyne_path = self.dataset_root_path + "/testing_live" + "/velodyne" 
             velodyne_number_images = len([name for name in os.listdir(velodyne_path)])
             self.img_list_and_infos = list(range(velodyne_number_images))
             with open(self.img_list_and_infos_path, 'rb') as f:
                 self.img_infos_dummy = pickle.load(f) # we just load a dummy in case we do not have annos
+                
+        # ------------------------------------------------------------------------------------------------------ 
+        #  setup ros publisher (for rviz visualization) and listener (to receiver point clouds live from sensor)
+        # ------------------------------------------------------------------------------------------------------   
         
         if self.production_mode or self.debug_save_points:
             
@@ -1898,6 +1935,10 @@ class dataLoader():
             from sensor_msgs.msg import PointCloud2, PointField
             import std_msgs.msg
             self.pub_points = rospy.Publisher('debug_points', PointCloud2)
+            self.bb_debug_load_data_py = rospy.Publisher("bb_debug_load_data_py", BoundingBoxArray)
+            self.calib = {"R0_rect" : np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).reshape(3,3),
+                        "Tr_velo_to_cam" : np.array([0.0, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0]).reshape(3,4)}
+
             self.subscriber = rospy.Subscriber("/camera/depth/color/points", msg_PointCloud2, self.production_pc_update) # source: to capture from depth_image_proc/point_cloud_xyz package
             
             self.fields = [PointField('x', 0, PointField.FLOAT32, 1),
@@ -1907,6 +1948,35 @@ class dataLoader():
             self.header = std_msgs.msg.Header()
             self.header.stamp = rospy.Time.now()
             self.header.frame_id = 'camera_color_frame'
+
+    # debug purpose
+    # ==================================================
+    def debug_save_points_func(self, points, message, gt_boxes=None):
+        
+        print("DEBUG RVIZ: "+message)
+        
+        self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+        
+        if gt_boxes is not None:
+            centers,dims,angles = gt_boxes[:, :3], gt_boxes[:, 3:6], gt_boxes[:, 6] # [a,b,c] -> [c,a,b] (camera to lidar coords)
+
+            centers = centers + [0.0,0.0,0.9]
+            send_3d_bbox(centers, dims, angles, self.bb_debug_load_data_py, self.header) 
+            
+            
+        
+        if False: print("")
+        
+        # ------------------------------------------------------------------------------------------------------ 
+        #  old functionality of this function
+        # ------------------------------------------------------------------------------------------------------
+        
+        # with open(os.getcwd() + "/scripts/debug_rviz/points/points.pkl", 'wb') as file:
+        #     pickle.dump(np.array(points), file, 2)
+        # origin = [0.5, 0.5, 0]
+        # gt_boxes_corners = center_to_corner_box3d(gt_boxes[:, :3], gt_boxes[:, 3:6], gt_boxes[:, 6], origin=origin, axis=2)
+        # with open(os.getcwd() + "/scripts/debug_rviz/points/bbox.pkl", 'wb') as file:
+    #     pickle.dump(np.array(gt_boxes_corners), file, 2)
 
 
     # just return the number of datapoints in the dataset
@@ -2226,10 +2296,11 @@ class dataLoader():
             # - rviz already shows the direct output of the realsense in lidar coords because of the topic "CameraInfo"
             r = R.from_euler('y', -90, degrees=True).as_dcm()
             r2 = R.from_euler('x', 90, degrees=True).as_dcm()
-            points = np.dot(points,r)
+            # rotate the pc so that z is height, x is depth and y is width (TODO, is this right?)
+            points = np.dot(points,r) # rotate the pc 
             points = np.dot(points,r2)
             points = points + [0.0,0.0,1.0] # elevate z coords of pointcloud to hight of the pipeline
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points)) # show pc in rviz 
         else:
             if self.custom_dataset:
                 velodyne_reduced_path = self.dataset_root_path + train_or_test + "/velodyne" + "/" + img_id + ".pkl" 
@@ -2248,9 +2319,9 @@ class dataLoader():
 
         input_dict = {
             'points': points,
-            'rect': img_infos['calib/R0_rect'].astype(np.float32),
-            'Trv2c': img_infos['calib/Tr_velo_to_cam'].astype(np.float32),
-            'P2': img_infos['calib/P2'].astype(np.float32),
+            'rect': img_infos['calib/R0_rect'].astype(np.float32), # is just the unity matrix for d435i data
+            'Trv2c': img_infos['calib/Tr_velo_to_cam'].astype(np.float32), # needed for the rotation of GT annos (stored in cam coord) to lidar coords
+            'P2': img_infos['calib/P2'].astype(np.float32), # not used for d435i data
             'image_shape': np.array(img_infos["img_shape"], dtype=np.int32) if 'img_shape' in img_infos else None,
             'image_idx': img_infos['image_idx'], 
             'image_path': img_infos['img_path'] if 'img_path' in img_infos else None
@@ -2333,6 +2404,17 @@ class dataLoader():
             sample_val_dataset_mode,
             img_infos            
             ):
+        """
+        Parameters
+        ----------
+        input_dict: pointcloud and annotation 
+        img_id: id of the pointcloud
+        sample_val_dataset_mode: bool, if true a new test dataset is created
+        img_infos: just used if sample_val_dataset_mode is true
+        Returns
+        -------
+        example: pointcloud and annos prepared for either traning or testing
+        """
         
         # ------------------------------------------------------------------------------------------------------ 
         # get different configs and params
@@ -2404,14 +2486,16 @@ class dataLoader():
 
             # ------------------------------------------------------------------------------------------------------ 
             # project gt_boxes from camera space to lidar space
+            # note: gt_boxes are stored in camera space coords 
+            # note: but lidar point cloud must not be transformed to lidar coords since they are already obviously stored in lidar space
+            # RECALL ANNOTATIONS: yzx(hwl)(kitti label file)<->xyz(lhw)(camera)<->z(-x)(-y)(wlh)(lidar)
             # ------------------------------------------------------------------------------------------------------
 
-            
             gt_boxes = box_camera_to_lidar(gt_boxes, rect, Trv2c)
 
             # debug
-            #if self.debug_save_points:debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            
+            if self.debug_save_points: self.debug_save_points_func(points, "input",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # filter undesired objects
@@ -2439,11 +2523,7 @@ class dataLoader():
                     self.sampler_max_point_collision,
                     self.sampler_min_point_collision,
                     points=points,
-                    random_crop=False,
-                    gt_group_ids=group_ids,
-                    rect=rect,
-                    Trv2c=Trv2c,
-                    P2=P2)
+                    random_crop=False)
 
             # ------------------------------------------------------------------------------------------------------ 
             # Concatentate annos with sampled objects 
@@ -2467,8 +2547,8 @@ class dataLoader():
                 points = np.concatenate([sampled_points, points], axis=0)
 
             # debug
-            #if self.debug_save_points:debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            
+            if self.debug_save_points: self.debug_save_points_func(points, "samples added",gt_boxes)
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Augmentation on boxes themselves
             # ------------------------------------------------------------------------------------------------------
@@ -2493,8 +2573,8 @@ class dataLoader():
                 [self.desired_objects.index(n) + 1 for n in gt_names], dtype=np.int32)
 
             # debug
-            #if self.debug_save_points:debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            
+            if self.debug_save_points: self.debug_save_points_func(points, "Augmentation on boxes themselves",gt_boxes)
             
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly flip boxes
@@ -2503,8 +2583,8 @@ class dataLoader():
             gt_boxes, points = random_flip(gt_boxes, points)
 
             # debug
-            #if self.debug_save_points:debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly flip boxess",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly rotates the whole pointcloud including gt boxes
@@ -2514,8 +2594,8 @@ class dataLoader():
             gt_boxes, points = global_rotation(gt_boxes, points, rotation=global_rotation_uniform_noise)
 
             # debug
-            #if self.debug_save_points:debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly rotates the whole pointcloud including gt boxes",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly scales the whole pointcloud including gt boxes
@@ -2525,8 +2605,7 @@ class dataLoader():
             gt_boxes, points = global_scaling_v2(gt_boxes, points,*global_scaling_uniform_noise)
 
             # debug
-            #if self.debug_save_points: debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly scales the whole pointcloud including gt boxes",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly translates the whole pointcloud including gt boxes
@@ -2536,8 +2615,8 @@ class dataLoader():
             gt_boxes, points = global_translate(gt_boxes, points, global_loc_noise_std)
 
             # debug
-            #if self.debug_save_points:debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly translates the whole pointcloud including gt boxes",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # Filter bboxes that are ouside the range
@@ -2567,8 +2646,7 @@ class dataLoader():
             np.random.shuffle(points)
 
             # debug
-            #if self.debug_save_points:debug_save_points_func(points,gt_boxes)
-            if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly shuffles the list of points",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # If we are in sample_val_dataset_mode we want to save the augmented pointclouds to "/testing/velodyne_sampled"
@@ -2642,7 +2720,7 @@ class dataLoader():
     
         # ------------------------------------------------------------------------------------------------------ 
         # Convert pc to voxels
-        # note 1: for return look a the function
+        # note 1: for return look at the function
         # note 2: the points which will be voxelized also contain the sampled bounding boxes. so this can not be the reason why far off objects are not detected
         # ------------------------------------------------------------------------------------------------------
 
@@ -2654,11 +2732,11 @@ class dataLoader():
         # The voxel coords are not given now in real coords but in feature_map_size coords instead.
         # Also it must be noted that although feature_map_size gets calculated later on in code, a similar calculation is used before in   
         # points_to_voxel; that why its possible to get feature_map_size coords before the actual creation of this variable
-        if self.debug_save_points:
-            with open(os.getcwd() + "/scripts/debug_rviz/points/coordinates.pkl", 'wb') as file:
-                pickle.dump(np.array(coordinates), file, 2)
-            with open(os.getcwd() + "/scripts/debug_rviz/points/voxels.pkl", 'wb') as file:
-                pickle.dump(np.array(voxels), file, 2)
+        # if self.debug_save_points:
+        #     with open(os.getcwd() + "/scripts/debug_rviz/points/coordinates.pkl", 'wb') as file:
+        #         pickle.dump(np.array(coordinates), file, 2)
+        #     with open(os.getcwd() + "/scripts/debug_rviz/points/voxels.pkl", 'wb') as file:
+        #         pickle.dump(np.array(voxels), file, 2)
         
         # ------------------------------------------------------------------------------------------------------ 
         # Create and fill-up Variable which will be returned 
@@ -2692,14 +2770,20 @@ class dataLoader():
         
         ret = generate_anchors(feature_map_size, self.config_anchor_generator) # return: [anchors,matched_thresholds,unmatched_thresholds]
         anchors = ret["anchors"] # anchors: [x, y, z, xdim, ydim, zdim, rad]
-
+        
         # ------------------------------------------------------------------------------------------------------
         # just flatten the whole anchor tile situtation into an array of anchors with its 7 features [x, y, z, xdim, ydim, zdim, rad]
         # ------------------------------------------------------------------------------------------------------
         
         anchors = anchors.reshape([-1, 7])
-        matched_thresholds = ret["matched_thresholds"]
-        unmatched_thresholds = ret["unmatched_thresholds"]
+        example["anchors"] = anchors # [x, y, z, xdim, ydim, zdim, rad] # list of anchors with the given features
+        
+        # ------------------------------------------------------------------------------------------------------ 
+        # return sample if in eval mode
+        # ------------------------------------------------------------------------------------------------------
+
+        if not self.training:
+            return example
 
         # ------------------------------------------------------------------------------------------------------
         # get the corners of all anchors in 2d (bev)
@@ -2707,7 +2791,6 @@ class dataLoader():
 
         anchors_bv = rbbox2d_to_near_bbox(
             anchors[:, [0, 1, 3, 4, 6]]) # return bboxes: [N, 4(xmin, ymin, xmax, ymax)] 
-        example["anchors"] = anchors # [x, y, z, xdim, ydim, zdim, rad] # list of anchors wuth the given features
 
         # ------------------------------------------------------------------------------------------------------ 
         # filter anchors which are too small
@@ -2739,14 +2822,6 @@ class dataLoader():
 
 
         # ------------------------------------------------------------------------------------------------------ 
-        # return sample if in eval mode
-        # ------------------------------------------------------------------------------------------------------
-
-        if not self.training:
-            return example
-
-
-        # ------------------------------------------------------------------------------------------------------ 
         # assign gt_boxes to anchors if in self.training mode
         # ------------------------------------------------------------------------------------------------------
 
@@ -2757,8 +2832,8 @@ class dataLoader():
                 gt_boxes, # [x, y, z, xdim, ydim, zdim, rad]
                 anchors_mask, # [boolean] # one boolean for each anchor
                 gt_classes=gt_classes, # [int] # one int for each gt_boxes
-                matched_thresholds=matched_thresholds, # [float] # one float for each anchors
-                unmatched_thresholds=unmatched_thresholds, # [float] # one float for each anchors
+                matched_thresholds=ret["matched_thresholds"], # [float] # one float for each anchors
+                unmatched_thresholds=ret["unmatched_thresholds"], # [float] # one float for each anchors
                 config_target_assigner=self.config_target_assigner)
 
             # update example

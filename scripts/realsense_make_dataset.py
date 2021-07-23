@@ -409,8 +409,8 @@ class listener():
             # save Calibration
             # ------------------------------------------------------------------------------------------------------
 
-            # this calib numbers are mostly made up by me, there is surely room for improvement
-            # TODO I should also check if this has effects on the training 
+            # everything but R0_rect and Tr_velo_to_cam are palceholder
+            # the placeholder are needed that the data work within the pipeline made for kitti data orginally
             calib = """P0: 7.070493000000e+02 0.000000000000e+00 6.040814000000e+02 0.000000000000e+00 0.000000000000e+00 7.070493000000e+02 1.805066000000e+02 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00 1.000000000000e+00 0.000000000000e+00
 P1: 7.070493000000e+02 0.000000000000e+00 6.040814000000e+02 -3.797842000000e+02 0.000000000000e+00 7.070493000000e+02 1.805066000000e+02 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00 1.000000000000e+00 0.000000000000e+00
 P2: 7.070493000000e+02 0.000000000000e+00 6.040814000000e+02 4.575831000000e+01 0.000000000000e+00 7.070493000000e+02 1.805066000000e+02 -3.454157000000e-01 0.000000000000e+00 0.000000000000e+00 1.000000000000e+00 4.981016000000e-03
@@ -437,7 +437,7 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
             dimensions = [1.8,0.4,0.6] # height,width,length (kitti format)
             #location = [2.0,0.0,-0.1] lidar coords: 
             #location = [-0.1,0.0,2.0] # image coords: we need to store in kitti image coords 
-            location = [1.0,-0.05,3.0] # image coords: we need to store in kitti image coords (x,y,z or so)
+            location = [1.0,-0.05,3.0] # image coords: we need to store in kitti image coords z(-x)(-y)
             angle = self.angle
             annoations = truncated+occluded+alpha+bbox+dimensions+location+angle
             annoations = name + " " + ' '.join(str(e) for e in annoations)

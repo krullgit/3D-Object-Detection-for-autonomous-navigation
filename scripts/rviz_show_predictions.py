@@ -299,7 +299,7 @@ def sendToRVIZ():
 
     show_annotations = True
     show_ground_truth = True
-    mode = "testing_sampled" # Options: live, training_unsampled, testing_sampled, testing_unsampled, gt_database_val, gt_database
+    mode = "training_unsampled" # Options: live, training_unsampled, testing_sampled, testing_unsampled, gt_database_val, gt_database
     # training_sampled is not here since the sampling is done during training, to see that you have to use the 
     # "save" param in "load_data.py" and "send_to_rviz.py"
 
@@ -419,7 +419,7 @@ def sendToRVIZ():
         rospy.sleep(0.0)
 
         try:
-                
+            print(counter)
             point_cloud = velodyne_data[counter]
 
             # ------------------------------------------------------------------------------------------------------
