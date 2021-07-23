@@ -19,18 +19,26 @@ from tensorflow.keras.applications.resnet50 import ResNet50
 # imports from own codebase
 from load_data import dataLoader, DataBaseSamplerV2
 from model.pointpillars import PillarFeatureNet, PointPillarsScatter
-from libraries.eval_helper_functions import second_box_decode, nms, tf_to_np_dtype, box_lidar_to_camera, center_to_corner_box3d, project_to_image
+from libraries.eval_helper_functions import second_box_decode, nms, tf_to_np_dtype, box_lidar_to_camera, project_to_image
 from load_data import center_to_corner_box2d, corner_to_standup_nd_jit
 
 import sys
 
 
-#@tf.function
+# @tf.function
+# this function returns the direction targets
+# which is a one hot vector
+# its mainly done by checking if the tagets have a postitve rotation, after
+# the baseline rotation of the anchor was added
+# the direction target basically says that the rotation prediction should be positive, if
+# the direcion target is 1 (1 = 0° to 180° & 0 = -180° to 0°).
+# otherwise the rotation prediction must be rotated by +180°
+# =========================================
 def get_direction_target(anchors, reg_targets, one_hot_bool=True):
     batch_size = tf.shape(reg_targets)[0]
     anchors = tf.reshape(anchors,(batch_size, -1, 7))
     rot_gt = reg_targets[..., -1] + anchors[..., -1]
-    dir_cls_targets = tf.cast((rot_gt > 0),tf.int64)    
+    dir_cls_targets = tf.cast((rot_gt > 0),tf.int64)
     if one_hot_bool:
         dir_cls_targets = one_hot(
             dir_cls_targets, 2, dtype=anchors.dtype)
@@ -54,6 +62,7 @@ def _get_pos_neg_loss(cls_loss, labels):
 
 #@tf.function
 def add_sin_difference(boxes1, boxes2):
+    # sin(a - b) = sina*cosb-cosa*sinb
     rad_pred_encoding = tf.sin(boxes1[..., -1:]) * tf.cos(boxes2[..., -1:])
     rad_tg_encoding = tf.cos(boxes1[..., -1:]) * tf.sin(boxes2[..., -1:])
     boxes1 = tf.concat([boxes1[..., :-1], rad_pred_encoding], axis=-1)
@@ -118,7 +127,10 @@ def create_loss(config,
         one_hot_targets = one_hot_targets[..., 1:]
 
     # ------------------------------------------------------------------------------------------------------
-    # encode the rotation in prediction and annotation by oberride it with their sine and cosine product
+    # Here, the loss for rotation (sin(a - b)) is prepared so that it can be forwarded to the same L1 loss function 
+    # as size and posititon (next in code)
+    # Therefore, [preds(a)] and [targets(b)] are converted to [sina*cosb] and [cosa*sinb] because:
+    # sin(a - b) = sina*cosb - cosa*sinb
     # ------------------------------------------------------------------------------------------------------
 
     if encode_rad_error_by_sin: # here true
@@ -136,7 +148,7 @@ def create_loss(config,
 
     # ------------------------------------------------------------------------------------------------------
     # Get sigmoid_focal_classification_loss for all cls_preds
-    # Note: With the use of cls_weights this only focusses on objects
+    # Note: With the use of cls_weights this only focusses on objects (not background)
     # ------------------------------------------------------------------------------------------------------
 
     cls_losses = sigmoid_focal_classification_loss(
@@ -161,12 +173,11 @@ def _softmax_cross_entropy_with_logits(logits, labels):
     # Get loss per anchor
     # ------------------------------------------------------------------------------------------------------
 
-    #logits and labels must be broadcastable: logits_size=[293632,2] labels_size=[1,293632]
+    #logits and labels must be broadcastable
     loss = tf.nn.softmax_cross_entropy_with_logits(labels,logits) # [n_anchor]
 
     #loss = tf.nn.softmax_cross_entropy_with_logits(tf.reduce_max(labels,axis=-1),logits)[1]
     return loss
-
 
 #@tf.function
 def weighted_softmax_classification_loss(prediction_tensor, target_tensor, weights):
@@ -390,7 +401,7 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
         code_weights = config["model"]["second"]["loss"]["localization_loss"]["weighted_smooth_l1"]["code_weight"]
 
         # ------------------------------------------------------------------------------------------------------
-        # Make code_weights trainable 
+        # init code_weights # trainable set to false since currently not good for accuracy
         # ------------------------------------------------------------------------------------------------------
 
         self.code_weights = tf.Variable(initial_value=code_weights,trainable=False, name="code_weights")
@@ -398,8 +409,6 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
         #e1: array([3.86831403e-01, 3.58270556e-01, 1.09733984e-01, 4.70212698e-01,4.40106750e-01, 4.64955688e-01, 1.25951146e-07], dtype=float32)>
         #e2: [ 9.6788816e-02,  6.3692927e-02, -3.4395538e-09,  1.6113661e-01, 1.3651466e-01,  1.7042099e-01,  5.1893308e-31]
         
-        self.codewise = True 
-
     #@tf.function
     def call(self, prediction_tensor, target_tensor, weights=None):
 
@@ -411,6 +420,7 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
 
         # ------------------------------------------------------------------------------------------------------
         # Multiply the code_weights (one per filter, for each anchor same) with the difference
+        # TODO do this in the initialization
         # ------------------------------------------------------------------------------------------------------
 
         if self.code_weights is not None:
@@ -424,7 +434,7 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
         abs_diff = tf.math.abs(diff)
 
         # ------------------------------------------------------------------------------------------------------
-        # Apply Equation (3)
+        # Apply Equation (3) (smooth L1)
         # ------------------------------------------------------------------------------------------------------
 
         abs_diff_lt_1 = tf.math.less_equal(abs_diff, 1 / (self.sigma**2))
@@ -432,22 +442,15 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
         loss = abs_diff_lt_1 * 0.5 * tf.math.pow(abs_diff * self.sigma, 2) \
         + (abs_diff - 0.5 / (self.sigma**2)) * (1. - abs_diff_lt_1)
 
-        if self.codewise:
-            anchorwise_smooth_l1norm = loss
+
+        anchorwise_smooth_l1norm = loss
 
         # ------------------------------------------------------------------------------------------------------
         # Apply additional weights (per anchor) 
         # - loss for other classes than objects (eg. backround) are multiplied with 0
         # ------------------------------------------------------------------------------------------------------
         
-        if weights is not None:
-            anchorwise_smooth_l1norm *= tf.expand_dims(weights, axis=-1)
-        else:
-            # not used
-            anchorwise_smooth_l1norm = torch.sum(loss, 2)#  * weights
-            anchorwise_smooth_l1norm = tf.math.reduce_sum(loss, 2)#  * weights
-            if weights is not None:
-                anchorwise_smooth_l1norm *= weights
+        anchorwise_smooth_l1norm *= tf.expand_dims(weights, axis=-1)
 
         # ------------------------------------------------------------------------------------------------------
         # return loss
@@ -456,7 +459,7 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
         return anchorwise_smooth_l1norm
 
 #@tf.function
-# Get:
+# Output:
 # cls_weights: The classification weights for each anchor (0 for dont cares) [batch_size, n_anchors]
 # reg_weights: The registration weights (0 for dont cares) [batch_size, n_anchors]
 # cared: True if Object or Background, False if dont care [batch_size, n_anchors]
@@ -465,7 +468,11 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
 def prepare_loss_weights(config,
                          labels,
                          dtype):
-    """get cls_weights and reg_weights from labels.
+    """
+    This class creates the weights for classification and regression targets. 
+    The classification targets (cls_weights) will have only weights for classes that are not dont_cares (inclusive background)
+    The regression targets (reg_weights) will have only weights for classes without background and not dont_cares
+    Also a boolean list will returned which indicates only is true for positions that are not dont_cares (inclusive background)
     """
 
     config = config
@@ -485,17 +492,17 @@ def prepare_loss_weights(config,
     # ------------------------------------------------------------------------------------------------------
 
     # label = 1 is positive, 0 is negative, -1 is don't care (ignore)
-    positives = labels > 0 # [batch_size, num_anchors]
-    negatives = labels == 0 # [batch_size, num_anchors]
-    positive_cls_weights = tf.cast(positives, tf.float32) * pos_cls_weight
-    negative_cls_weights = tf.cast(negatives, tf.float32) * neg_cls_weight
-    cls_weights = negative_cls_weights + positive_cls_weights 
+    positives = labels > 0 # [batch_size, num_anchors] # shape=(2, 146816)
+    negatives = labels == 0 # [batch_size, num_anchors] # shape=(2, 146816)
+    positive_cls_weights = tf.cast(positives, tf.float32) * pos_cls_weight # shape=(2, 146816)
+    negative_cls_weights = tf.cast(negatives, tf.float32) * neg_cls_weight # shape=(2, 146816)
+    cls_weights = negative_cls_weights + positive_cls_weights # cls weights for all classes but dont_care # shape=(2, 146816)
 
     # ------------------------------------------------------------------------------------------------------
-    # Get reg_weights
+    # convert the weights of all classes but background into floats
     # ------------------------------------------------------------------------------------------------------
 
-    reg_weights = tf.cast(positives, tf.float32)
+    reg_weights = tf.cast(positives, tf.float32) # shape=(2, 146816)
 
     # ------------------------------------------------------------------------------------------------------
     # We are normalizing the reg_weights & cls_weights with the number of postive items in labels (pos_normalizer) per batch
@@ -914,8 +921,8 @@ class VoxelNet(tf.keras.Model):
 
         if self.training:
 
-            box_preds = preds_dict["box_preds"]
-            cls_preds = preds_dict["cls_preds"]
+            box_preds = preds_dict["box_preds"] # shape=(2, 248, 296, 14)
+            cls_preds = preds_dict["cls_preds"] # shape=(2, 248, 296, 2)
 
             # ------------------------------------------------------------------------------------------------------
             # Get cls_weights, reg_weights, cared
@@ -973,17 +980,10 @@ class VoxelNet(tf.keras.Model):
             # Split negative and positive anchor classifications and sum them up
             # ------------------------------------------------------------------------------------------------------
 
-            cls_pos_loss, cls_neg_loss = _get_pos_neg_loss(cls_loss, labels)  # TODO: Not even used?
+            cls_pos_loss, cls_neg_loss = _get_pos_neg_loss(cls_loss, labels)  # Not used, just for debugging
 
             # ------------------------------------------------------------------------------------------------------
-            # Apply weights 
-            # ------------------------------------------------------------------------------------------------------
-
-            cls_pos_loss /= self.config["model"]["second"]["pos_class_weight"] # only used for metrics
-            cls_neg_loss /= self.config["model"]["second"]["neg_class_weight"] # only used for metrics
-            
-            # ------------------------------------------------------------------------------------------------------
-            # Sum Up all location losses and normalize
+            # Sum Up all classification losses, normalize and apply weight
             # ------------------------------------------------------------------------------------------------------
             
             cls_loss_reduced = tf.math.reduce_sum(cls_loss) / self.batch_size
@@ -1034,23 +1034,24 @@ class VoxelNet(tf.keras.Model):
                     dir_logits, dir_targets, weights=weights)
 
                 # ------------------------------------------------------------------------------------------------------
-                # Sum Up all direction classificaion losses and normalize
+                # Sum Up all dir losses, normalize and apply weight
                 # ------------------------------------------------------------------------------------------------------
 
                 dir_loss = tf.math.reduce_sum(dir_loss) / tf.cast(batch_size_dev,tf.float32)
                 loss += dir_loss * self.config["model"]["second"]["direction_loss_weight"]
 
+            # retrun loss for optimizer. Note, that just the "loss" is used for optimization
             
             return {
-                "loss": loss, # Sum of Location, Classification and direction classificaion loss
+                "loss": loss, # Sum of Location, Classification and direction classificaion loss [float]
                 "cls_loss": cls_loss, # classification losses [batch_size, n_anchor, n_classes(here 1)]
                 "loc_loss": loc_loss, # classification losses [batch_size, n_anchor, n_locations(here 7)]
-                "cls_pos_loss": cls_pos_loss, # Sum of positive classification losses
-                "cls_neg_loss": cls_neg_loss, # Sum of negative classification losses
+                "cls_pos_loss": cls_pos_loss, # Sum of positive classification losses [float]
+                "cls_neg_loss": cls_neg_loss, # Sum of negative classification losses [float]
                 "cls_preds": cls_preds, # classification predictions [batch_size, width, height, n_classes(here 1)]
-                "dir_loss_reduced": dir_loss, # Sum of direction classification losses
-                "cls_loss_reduced": cls_loss_reduced, # Sum of classification losses
-                "loc_loss_reduced": loc_loss_reduced, # Sum of location losses
+                "dir_loss_reduced": dir_loss, # Sum of direction classification losses [float]
+                "cls_loss_reduced": cls_loss_reduced, # Sum of classification losses [float]
+                "loc_loss_reduced": loc_loss_reduced, # Sum of location losses [float]
                 "cared": cared, # Filter for non_cares(-1) [batch_size, n_anchor]
             }
         else:
@@ -1099,6 +1100,10 @@ class VoxelNet(tf.keras.Model):
         batch_box_preds = preds_dict["box_preds"].numpy()
         batch_cls_preds = preds_dict["cls_preds"].numpy()
         batch_dir_preds = preds_dict["dir_cls_preds"].numpy()
+        
+        # ------------------------------------------------------------------------------------------------------
+        # reshape network outputs that everything so that the anchor dim is flattened 
+        # ------------------------------------------------------------------------------------------------------
         
         batch_box_preds = np.reshape(batch_box_preds,(batch_size, -1,self.box_code_size))
         batch_cls_preds = np.reshape(batch_cls_preds,(batch_size, -1,num_class_with_bg))

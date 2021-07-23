@@ -26,7 +26,6 @@ from scipy.spatial.transform import Rotation as R
 
 from libraries.metrics import update_metrics, Accuracy, PrecisionRecall, Scalar
 import second.data.kitti_common as kitti
-from load_data import center_to_corner_box3d
 
 
 # convert camera to lidar coords

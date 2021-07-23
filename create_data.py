@@ -91,18 +91,75 @@ def _calculate_num_points_in_gt(data_path, infos, relative_path, remove_outside=
 
 
         annos["num_points_in_gt"] = num_points_in_gt.astype(np.int32)
-
-# 
+        
+# ------------------------------------------------------------------------------------------------------ 
+# creates the files "kitti_infos_train.pkl" and "kitti_infos_val.pkl" which contains the gt annotations and calib info for every pointcloud in training- and test-dataset
+# here, the annos are transformed and saved in the camera coord system, see next line:
+# RECALL ANNOTATIONS: yzx(hwl)(kitti label file)<->xyz(lhw)(camera)<->z(-x)(-y)(wlh)(lidar)
+# ------------------------------------------------------------------------------------------------------
+# example output:
+# ------------------------------------------------------------------------------------------------------
+# 'annos':{'name': array(['Pedestrian']...pe='<U10'), 'truncated': array([0.]), 'occluded': array([0]), 'alpha': array([0.]), 'bbox': array([[700., 100., ...., 300.]]), 'dimensions': array([[0.6, 1.8, 0.4]]), 'location': array([[-0.1,  0. ,  2. ]]), 'rotation_y': array([1.57079633]), 'score': array([0.]), 'index': array([0], dtype=int32), 'group_ids': array([0], dtype=int32), 'difficulty': array([0], dtype=int32), 'num_points_in_gt': array([3768], dtype=int32)}
+# 'calib/Tr_imu_to_velo':array([[ 9.999976e-01,  7.553071e-04, -2.035826e-03, -8.086759e-01],
+#        [-7.854027e-04,  9.998898e-01, -1.482298e-02,  3.195559e-01],
+#        [ 2.024406e-03,  1.482454e-02,  9.998881e-01, -7.997231e-01],
+#        [ 0.000000e+00,  0.000000e+00,  0.000000e+00,  1.000000e+00]])
+# 'calib/Tr_velo_to_cam':array([[ 0., -1.,  0.,  0.],
+#        [ 0.,  0., -1.,  0.],
+#        [ 1.,  0.,  0.,  0.],
+#        [ 0.,  0.,  0.,  1.]])
+# 'calib/R0_rect':array([[1., 0., 0., 0.],
+#        [0., 1., 0., 0.],
+#        [0., 0., 1., 0.],
+#        [0., 0., 0., 1.]])
+# 'calib/P3':array([[ 7.070493e+02,  0.000000e+00,  6.040814e+02, -3.341081e+02],
+#        [ 0.000000e+00,  7.070493e+02,  1.805066e+02,  2.330660e+00],
+#        [ 0.000000e+00,  0.000000e+00,  1.000000e+00,  3.201153e-03],
+#        [ 0.000000e+00,  0.000000e+00,  0.000000e+00,  1.000000e+00]])
+# 'calib/P2':array([[ 7.070493e+02,  0.000000e+00,  6.040814e+02,  4.575831e+01],
+#        [ 0.000000e+00,  7.070493e+02,  1.805066e+02, -3.454157e-01],
+#        [ 0.000000e+00,  0.000000e+00,  1.000000e+00,  4.981016e-03],
+#        [ 0.000000e+00,  0.000000e+00,  0.000000e+00,  1.000000e+00]])
+# 'calib/P1':array([[ 707.0493,    0.    ,  604.0814, -379.7842],
+#        [   0.    ,  707.0493,  180.5066,    0.    ],
+#        [   0.    ,    0.    ,    1.    ,    0.    ],
+#        [   0.    ,    0.    ,    0.    ,    1.    ]])
+# 'calib/P0':array([[707.0493,   0.    , 604.0814,   0.    ],
+#        [  0.    , 707.0493, 180.5066,   0.    ],
+#        [  0.    ,   0.    ,   1.    ,   0.    ],
+#        [  0.    ,   0.    ,   0.    ,   1.    ]])
+# 'img_shape':array([ 800, 1280], dtype=int32)
+# 'img_path':'training/image_2/000810.png'
+# 'velodyne_path':'training/velodyne/000810.pkl'
+# 'image_idx':810
+# 'pointcloud_num_features':4
+# special variables
+# function variables
+# 'name':array(['Pedestrian'], dtype='<U10')
+# 'truncated':array([0.])
+# 'occluded':array([0])
+# 'alpha':array([0.])
+# 'bbox':array([[700., 100., 800., 300.]])
+# 'dimensions':array([[0.6, 1.8, 0.4]])
+# 'location':array([[-0.1,  0. ,  2. ]])
+# 'rotation_y':array([1.57079633])
+# 'score':array([0.])
+# 'index':array([0], dtype=int32)
+# 'group_ids':array([0], dtype=int32)
+# 'difficulty':array([0], dtype=int32)
+# 'num_points_in_gt':array([3768], dtype=int32)
+# ------------------------------------------------------------------------------------------------------
 # =========================================
 def create_kitti_info_file(data_path,
                            save_path=None,
                            create_trainval=False,
                            relative_path=True):
 
-    train_img_ids = list(range(0,4533))
-    val_img_ids = list(range(0,750))
-    trainval_img_ids = list(range(0,7480)) # only kitti
-    test_img_ids = list(range(0,7517)) # only kitti
+    
+    train_img_ids = list(range(0,4533)) # indices of training images that will appear in the info file
+    val_img_ids = list(range(0,750)) # indices of test images that will appear in the info file
+    # trainval_img_ids = list(range(0,7480)) # only kitti
+    # test_img_ids = list(range(0,7517)) # only kitti
 
     print("Generate info. this may take several minutes.")
     if save_path is None:
@@ -265,8 +322,18 @@ def create_reduced_point_cloud(data_path,
             data_path, test_info_path, save_path, back=True)
 
 
-# create files which contain for each example the gt boxes (position, num points)
-#======================================================================
+# ------------------------------------------------------------------------------------------------------
+# create the file "kitti_dbinfos_val.pkl" or  "kitti_dbinfos_train.pkl" which contains gt annotations for the groundtruth_database
+# saves the point belonging to that groundtruth database annotations to the path database_save_path
+# here, the annos are saved lidar coord system, see next line
+# RECALL ANNOTATIONS: yzx(hwl)(kitti label file)<->xyz(lhw)(camera)<->z(-x)(-y)(wlh)(lidar)
+# ------------------------------------------------------------------------------------------------------
+# example output:
+# ------------------------------------------------------------------------------------------------------
+# 0000:{'name': 'Pedestrian', 'path': 'gt_database/000000_P...rian_0.bin', 'image_idx': '000000', 'gt_idx': 0, 'box3d_lidar': array([ 2.        , ...14159265]), 'num_points_in_gt': 5248, 'difficulty': 0, 'group_id': 0, 'score': 0.0}
+# 0001:{'name': 'Pedestrian', 'path': 'gt_database/000001_P...rian_0.bin', 'image_idx': '000001', 'gt_idx': 0, 'box3d_lidar': array([ 2.        , ...14159265]), 'num_points_in_gt': 5261, 'difficulty': 0, 'group_id': 1, 'score': 0.0}
+# 0002:{'name': 'Pedestrian', 'path': 'gt_database/000002_P...rian_0.bin', 'image_idx': '000002', 'gt_idx': 0, 'box3d_lidar': array([ 2.        , ...14159265]), 'num_points_in_gt': 5210, 'difficulty': 0, 'group_id': 2, 'score': 0.0}
+# ------------------------------------------------------------------------------------------------------
 def create_groundtruth_database(data_path,
                                 train_or_test,
                                 info_path=None,
