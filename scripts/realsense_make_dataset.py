@@ -202,7 +202,7 @@ def pc2_to_xyzrgb(point):
 # =========================================
 class listener(): 
 
-    def __init__(self, dataset_root_path, bb_rotation, image_counter_start, image_counter_end, train_or_test, empty_annos, image_counter_naming_start, save_every_x_step):
+    def __init__(self, dataset_root_path, bb_rotation, start_idx, end_idx, train_or_test, empty_annos, save_every_x_step):
 
         # ------------------------------------------------------------------------------------------------------
         # set variables
@@ -215,11 +215,10 @@ class listener():
 
         # other variables
         self.image_counter = 0
-        self.image_counter_naming_start = image_counter_naming_start # index where the naming starts
-        self.image_counter_start = int(image_counter_start) # index for the point clouds / also effects the naming
+        self.start_idx = int(start_idx) # index for the point clouds # also effects the naming
         #self.image_counter = 700
-        self.image_counter_end = int(image_counter_end)#2400 # index where self.image_counter have to stop
-        #self.image_counter_end = 750#750
+        self.end_idx = int(end_idx)#2400 # index where self.image_counter have to stop
+        #self.end_idx = 750#750
         self.dataset_root_path = dataset_root_path # where the data should be stored
         self.mode = train_or_test # option:test/train / are we doing recording for training or testing?
         self.data = [] # here we cache point clouds 
@@ -249,7 +248,7 @@ class listener():
         # fill up the buffer chache for the point clouds
         # ------------------------------------------------------------------------------------------------------
 
-        if self.image_counter >= self.image_counter_start and self.image_counter < self.image_counter_end:
+        if self.image_counter >= self.start_idx and self.image_counter < self.end_idx:
             self.data.append(data)
 
         # increase image_counter
@@ -345,17 +344,17 @@ class listener():
         # if we reached the number of point clouds we wanted to save: exit
         # ------------------------------------------------------------------------------------------------------
 
-        if self.image_counter > self.image_counter_end:
-            import sys
-            print("DONE") 
-            sys.exit()
+        # if self.start_idx > self.end_idx:
+        #     import sys
+        #     print("DONE")
+        #     sys.exit()
 
         # ------------------------------------------------------------------------------------------------------
         # if we did not reach the image ID when we want to start saving: skip
         # ------------------------------------------------------------------------------------------------------
 
-        if self.image_counter <= self.image_counter_start:
-            return None
+        # if self.image_counter <= self.start_idx:
+        #     return None
 
         if self.image_counter % save_every_x_step == 0:
             
@@ -363,8 +362,8 @@ class listener():
             # print how many point clouds we have saved already
             # ------------------------------------------------------------------------------------------------------
 
-            self.image_counter_naming_start += 1
-            print("Current ID Naming: {}".format(str(self.image_counter_naming_start)))
+            
+            print("Current ID Naming: {}".format(str(self.start_idx)))
 
             # ------------------------------------------------------------------------------------------------------
             # convert pountcloud format form sensor to array
@@ -378,7 +377,7 @@ class listener():
             # ------------------------------------------------------------------------------------------------------
 
             #pc = pc[1::4]
-            pc = pc[1::10] # the rosbag has more points for some reason
+            pc = pc[1::4] # the rosbag has more points for some reason
 
             # ------------------------------------------------------------------------------------------------------
             # Rotate to get to Kitti coords
@@ -394,7 +393,8 @@ class listener():
             # ------------------------------------------------------------------------------------------------------
 
             # we create leading zeros of the index to match the filenames of the dataset
-            image_counter_leading_zeros = "%06d" % (int(self.image_counter_naming_start),) 
+            image_counter_leading_zeros = "%06d" % (int(self.start_idx),) 
+            self.start_idx += 1
             if self.mode == "train":
                 filepath_pc = self.dataset_root_path + "training/" + "velodyne/" + str(image_counter_leading_zeros) + ".pkl"
             elif self.mode == "test":
@@ -403,7 +403,6 @@ class listener():
             pc = np.array(pc) + [0.0,0.0,1.0]
             with open(filepath_pc, 'wb') as file:
                 pickle.dump(np.array(pc), file, 2)
-            self.image_counter += 1
 
             # ------------------------------------------------------------------------------------------------------
             # save Calibration
@@ -448,17 +447,21 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
             if self.empty_annos == False:
                 with open(filepath_annoation, 'w') as file:
                     file.write(annoations)
+                    
+                
+                # ------------------------------------------------------------------------------------------------------
+                # Publish 3D bbox for debug 
+                # ------------------------------------------------------------------------------------------------------
+
+                # also transform location and dimensions back to my rviz coords
+                send_3d_bbox_anno(self.bb_ground_truth_pub, np.array(location)[[2,0,1]],np.array(dimensions)[[1,2,0]],angle[0], self.header)
+
             else:
                 with open(filepath_annoation, 'w') as file:
                     file.write("")
-
-            # ------------------------------------------------------------------------------------------------------
-            # Publish 3D bbox for debug 
-            # ------------------------------------------------------------------------------------------------------
-
-            # also transform location and dimensions back to my rviz coords
-            send_3d_bbox_anno(self.bb_ground_truth_pub, np.array(location)[[2,0,1]],np.array(dimensions)[[1,2,0]],angle[0], self.header)
-
+                    
+                    
+            
 
     # Just helper function to run this class
     # has a countdown and sets up the ros subscriber
@@ -486,10 +489,10 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
             self.subscriber = rospy.Subscriber("/camera/depth/color/points", msg_PointCloud2, self.callback_no_annos) # source: realsense directly
             #self.subscriber = rospy.Subscriber("/camera/depth/points", msg_PointCloud2, self.callback_no_annos) # source: to capture from depth_image_proc/point_cloud_xyz package
 
-            # we check regularly if we have enough images (image_counter_end) and than unregister the subscriber and save the points
+            # we check regularly if we have enough images (end_idx) and than unregister the subscriber and save the points
             while True:
                 time.sleep(0.1)
-                if self.image_counter >= self.image_counter_end:
+                if self.image_counter >= self.end_idx:
                     self.subscriber.unregister()
                     self.save()
         
@@ -499,38 +502,47 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
             self.subscriber = rospy.Subscriber("/camera/depth/color/points", msg_PointCloud2, self.callback) # source: to capture from depth_image_proc/point_cloud_xyz package
 
             # spin() simply keeps python from exiting until this node is stopped
-            rospy.spin()
+            # rospy.spin()
+            
+            # we check regularly if we have enough images (end_idx) and than unregister the subscriber and save the points
+            while True:
+                time.sleep(0.1)
+                if self.start_idx > self.end_idx:
+                    self.subscriber.unregister()
+                    print("DONE")
+                    sys.exit()
         
 
         
 if __name__ == '__main__':
+    
+    # python scripts/realsense_make_dataset.py live_mode_off /home/makr/Documents/data/pedestrian_3d_own/1/object/ -3.14 0 150 test True 750
+
     try:
         live_mode = sys.argv[1]
         if live_mode == "live_mode_on":
             dataset_root_path = sys.argv[2]
             bb_rotation = 0.0
-            image_counter_start = 1000
-            image_counter_end = 6000
+            start_idx = 1000
+            end_idx = 6000
             train_or_test = "0"
             empty_annos = False
             image_counter_naming_start = None
             save_every_x_step = None
-        else:
+        if live_mode == "live_mode_off":
             dataset_root_path = sys.argv[2]
             bb_rotation = float(sys.argv[3])
-            image_counter_start = int(sys.argv[4])
-            image_counter_end = int(sys.argv[5])
+            start_idx = int(sys.argv[4])
+            end_idx = int(sys.argv[5])
             train_or_test = sys.argv[6]
             empty_annos = bool(sys.argv[7])
-            image_counter_naming_start = int(sys.argv[8])
-            save_every_x_step = int(sys.argv[9])
+            save_every_x_step = int(sys.argv[8])
         listener = listener(dataset_root_path=dataset_root_path, 
                             bb_rotation=bb_rotation, 
-                            image_counter_start=image_counter_start, 
-                            image_counter_end=image_counter_end,
+                            start_idx=start_idx, 
+                            end_idx=end_idx,
                             train_or_test=train_or_test,
                             empty_annos=empty_annos,
-                            image_counter_naming_start=image_counter_naming_start, 
                             save_every_x_step=save_every_x_step)
         listener.run(live_mode=live_mode)
    

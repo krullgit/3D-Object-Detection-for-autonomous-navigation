@@ -156,8 +156,8 @@ def create_kitti_info_file(data_path,
                            relative_path=True):
 
     
-    train_img_ids = list(range(0,4533)) # indices of training images that will appear in the info file
-    val_img_ids = list(range(0,750)) # indices of test images that will appear in the info file
+    train_img_ids = list(range(0,3841)) # indices of training images that will appear in the info file
+    val_img_ids = list(range(0,1200)) # indices of test images that will appear in the info file
     # trainval_img_ids = list(range(0,7480)) # only kitti
     # test_img_ids = list(range(0,7517)) # only kitti
 

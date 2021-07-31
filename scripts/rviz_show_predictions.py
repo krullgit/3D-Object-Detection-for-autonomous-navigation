@@ -290,7 +290,8 @@ def sendToRVIZ():
     rospy.init_node('talker', anonymous=True)
     #giving some time for the publisher to register
     rospy.sleep(0.1)
-    counter = 0
+    counter = 750
+    counter_ini = counter
     prediction_min_score = 0.1
 
     # ------------------------------------------------------------------------------------------------------
@@ -299,7 +300,7 @@ def sendToRVIZ():
 
     show_annotations = True
     show_ground_truth = True
-    mode = "training_unsampled" # Options: live, training_unsampled, testing_sampled, testing_unsampled, gt_database_val, gt_database
+    mode = "testing_sampled" # Options: live, training_unsampled, testing_sampled, testing_unsampled, gt_database_val, gt_database
     # training_sampled is not here since the sampling is done during training, to see that you have to use the 
     # "save" param in "load_data.py" and "send_to_rviz.py"
 
@@ -325,16 +326,26 @@ def sendToRVIZ():
         #    thesis_eval_dict = pickle.load(file)
         # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_399/out_dir_eval_results/result_epoch_8.pkl", "rb") as file: 
         #    thesis_eval_dict = pickle.load(file)
-        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_411/out_dir_eval_results/result_epoch_16.pkl", "rb") as file: 
-           thesis_eval_dict = pickle.load(file)
-        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_411/out_dir_eval_results/result.pkl", "rb") as file: 
-           thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_411/out_dir_eval_results/result_epoch_16.pkl", "rb") as file: 
+        #    thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_411/out_dir_eval_results/result.pkl", "rb") as file: 
+        #    thesis_eval_dict = pickle.load(file)
         # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_496/out_dir_eval_results/result.pkl", "rb") as file: 
         #    thesis_eval_dict = pickle.load(file)
-        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_420/out_dir_eval_results/result_epoch_21.pkl", "rb") as file: 
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_6/out_dir_eval_results/result.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_27/out_dir_eval_results/result_epoch_21.pkl", "rb") as file: 
         #    thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_29/out_dir_eval_results/result_epoch_12.pkl", "rb") as file: 
+        #    thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_32/out_dir_eval_results/result_epoch_34.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_34/out_dir_eval_results/result_epoch_11.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
         # load point clouds
         point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/testing/velodyne" # TESTING SAMPLED/UNSAMPLED DATA (depending on what you copy into the folder)
+        show_annotations = True
+        show_ground_truth = True
     if mode == "training_unsampled":
         # load gt
         # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_136/out_dir_eval_results/result_epoch_4.pkl", "rb") as file: 
@@ -346,6 +357,7 @@ def sendToRVIZ():
         # load point clouds
         point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/training/velodyne"
         show_annotations = False
+        show_ground_truth = False
     if mode == "live":
         # load gt
         # load annos
@@ -383,8 +395,13 @@ def sendToRVIZ():
         # load annosz
 
         # load point clouds
-        point_cloud_path = "/home/makr/Desktop/temp/pedestrian_3d_own/1/object/gt_database_val"
+        point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/gt_database_val"
+        show_annotations = False
+        show_ground_truth = False
+
+
     if mode == "gt_database":
+        
         # load gt
 
         # load annos
@@ -419,6 +436,8 @@ def sendToRVIZ():
         rospy.sleep(0.0)
 
         try:
+            input("Press Enter to continue...")
+            
             print(counter)
             point_cloud = velodyne_data[counter]
 
@@ -449,7 +468,6 @@ def sendToRVIZ():
             pc2 = point_cloud2.create_cloud(header, fields, point_cloud)
             point_cloud_pub.publish(pc2)
 
-
             # ------------------------------------------------------------------------------------------------------
             # Create and Publish Ground Truth Boxes 
             # ------------------------------------------------------------------------------------------------------
@@ -465,7 +483,7 @@ def sendToRVIZ():
             # ------------------------------------------------------------------------------------------------------
 
             if show_annotations:
-                annotations = thesis_eval_dict[counter]
+                annotations = thesis_eval_dict[counter-counter_ini]
                 detection_anno = remove_low_score(annotations, prediction_min_score)
                 if len(detection_anno["score"]) > 0:
                     print(detection_anno["score"])
@@ -473,7 +491,7 @@ def sendToRVIZ():
                 #centers = centers + [0.0,0.0,1.9]   # Epoch 2
                 #centers = centers + [0.0,0.0,2.3]      #Epoch 3            
                 #centers = centers + [0.0,0.0,2.4] # live
-                centers = centers + [0.0,0.0,0.9] # live # TODO: müsste eigentlich um höhe/2 angehoben werden weil Pointpillars die z position am boden angibt der bbox und rviz die z mitte der höhe der bbox
+                centers = centers + [0.0,0.0,1.0] # live # TODO: müsste eigentlich um höhe/2 angehoben werden weil Pointpillars die z position am boden angibt der bbox und rviz die z mitte der höhe der bbox
                 send_3d_bbox(centers, dims, angles, bb_pred_guess_1_pub, header)      
 
             if(counter%100==0):

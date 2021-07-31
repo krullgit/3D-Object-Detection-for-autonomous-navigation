@@ -17,7 +17,6 @@ from tensorflow import keras
 from tensorflow.keras.applications.resnet50 import ResNet50
 
 # imports from own codebase
-from load_data import dataLoader, DataBaseSamplerV2
 from model.pointpillars import PillarFeatureNet, PointPillarsScatter
 from libraries.eval_helper_functions import second_box_decode, nms, tf_to_np_dtype, box_lidar_to_camera, project_to_image
 from load_data import center_to_corner_box2d, corner_to_standup_nd_jit
@@ -25,7 +24,6 @@ from load_data import center_to_corner_box2d, corner_to_standup_nd_jit
 import sys
 
 
-# @tf.function
 # this function returns the direction targets
 # which is a one hot vector
 # its mainly done by checking if the tagets have a postitve rotation, after
@@ -44,7 +42,6 @@ def get_direction_target(anchors, reg_targets, one_hot_bool=True):
             dir_cls_targets, 2, dtype=anchors.dtype)
     return dir_cls_targets
 
-#@tf.function
 def _get_pos_neg_loss(cls_loss, labels): 
     # cls_loss: [N, num_anchors, num_class]
     # labels: [N, num_anchors]
@@ -60,7 +57,6 @@ def _get_pos_neg_loss(cls_loss, labels):
         cls_neg_loss = tf.math.reduce_sum(cls_loss[..., 0]) / batch_size 
     return cls_pos_loss, cls_neg_loss
 
-#@tf.function
 def add_sin_difference(boxes1, boxes2):
     # sin(a - b) = sina*cosb-cosa*sinb
     rad_pred_encoding = tf.sin(boxes1[..., -1:]) * tf.cos(boxes2[..., -1:])
@@ -69,11 +65,9 @@ def add_sin_difference(boxes1, boxes2):
     boxes2 = tf.concat([boxes2[..., :-1], rad_tg_encoding], axis=-1)
     return boxes1, boxes2
 
-#@tf.function
 def one_hot(tensor, depth, dim=-1, on_value=1.0, dtype=tf.float32):    
     return tf.one_hot(tensor,depth)
 
-#@tf.function
 def create_loss(config,
                 box_preds,
                 cls_preds,
@@ -406,10 +400,7 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
 
         self.code_weights = tf.Variable(initial_value=code_weights,trainable=False, name="code_weights")
         
-        #e1: array([3.86831403e-01, 3.58270556e-01, 1.09733984e-01, 4.70212698e-01,4.40106750e-01, 4.64955688e-01, 1.25951146e-07], dtype=float32)>
-        #e2: [ 9.6788816e-02,  6.3692927e-02, -3.4395538e-09,  1.6113661e-01, 1.3651466e-01,  1.7042099e-01,  5.1893308e-31]
         
-    #@tf.function
     def call(self, prediction_tensor, target_tensor, weights=None):
 
         # ------------------------------------------------------------------------------------------------------
@@ -458,7 +449,6 @@ class WeightedSmoothL1LocalizationLoss(tf.keras.Model):
 
         return anchorwise_smooth_l1norm
 
-#@tf.function
 # Output:
 # cls_weights: The classification weights for each anchor (0 for dont cares) [batch_size, n_anchors]
 # reg_weights: The registration weights (0 for dont cares) [batch_size, n_anchors]
@@ -518,7 +508,7 @@ def prepare_loss_weights(config,
 
     return cls_weights, reg_weights, cared
 
-# This model contains the params and layers for the RPN
+# This model contains the params and layers for the RPN -> it is actually an SSD
 # The RPN contains downsampling, upsampling and detection heads
 # =========================================
 class RPN(tf.keras.Model):
@@ -535,9 +525,9 @@ class RPN(tf.keras.Model):
         # params
         # ------------------------------------------------------------------------------------------------------
 
-        self.training = training# TODO distinguish between eval and train
-
-        anchor_generator_stride =  self.config["model"]["second"]["target_assigner"]["anchor_generators"]["anchor_generator_stride"]
+        # set the layers to training or eval mode
+        self.training = training
+        anchor_generator_stride = self.config["model"]["second"]["target_assigner"]["anchor_generators"]["anchor_generator_stride"]
         rotations = anchor_generator_stride["rotations"]
         sizes = anchor_generator_stride["sizes"]
         num_rot = len(rotations)
@@ -651,7 +641,6 @@ class RPN(tf.keras.Model):
         self.deconv3.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.deconv3.add(tf.keras.layers.ReLU())
 
-
         # ------------------------------------------------------------------------------------------------------
         # set the number of predicted classes depending on if we want an extra class for the background
         # ------------------------------------------------------------------------------------------------------
@@ -683,53 +672,31 @@ class RPN(tf.keras.Model):
         if self._use_direction_classifier: # (here true)
             self.conv_dir_cls = tf.keras.layers.Conv2D(self._num_anchor_per_loc * 2,kernel_size=1,kernel_initializer=keras.initializers.he_uniform(seed=None),strides=(1,1), name="conv_dir_cls",use_bias=True)# TODO use_bias should be true I think
 
-    #@tf.function
     # This calls the RPN 
     # input: [batch_size, filter/channel, width, height] 
-
     def call(self, inputs, bev=None):# TensorShape([1, 64, 248, 296]) 
 
-        # import pickle
-        # with open('./rpn_x', 'rb') as file:
-        #     a = pickle.load(file)
-        #     t = tf.constant(a)
-        #     t1 = tf.transpose(t,(0,2,3,1)) 
-        # b = tf.keras.layers.BatchNormalization(epsilon=1e-3, momentum=0.01, trainable=self.training,axis=-3)(t1)
-        log_activations = True
-
-        x = tf.transpose(inputs,(0,2,3,1)) 
-        x = self.block1(x, training=self.training) # TensorShape([1, 248, 296, 64])x # max 2,8/8,9
-
-        # debug
-        # if log_activations:
-        #     with self.writer.as_default():
-        #         tf.summary.histogram("x1", x, step=step_current)
-        up1 = self.deconv1(x, training=self.training) # TensorShape([1, 248, 296, 128])x
-        x = self.block2(x, training=self.training) # shape=(1, 124, 148, 128) x  # max 0,12
-        up2 = self.deconv2(x, training=self.training) #shape=(1, 248, 296, 128) x 97881.055
-        x = self.block3(x, training=self.training) # shape=(1, 62, 74, 256) # max 0,32
-        up3 = self.deconv3(x, training=self.training) # shape=(1, 248, 296, 128)
-        x = tf.concat([up1, up2, up3], axis=3) # shape=(1, 248, 296, 384) # max:1.2 sum: 727427.75
-        
-        # debug
-        # if tf.reduce_sum((tf.cast(tf.math.is_nan(x), tf.int32))) > 0 :
-        #     print("NAN") 
-
-        box_preds = self.conv_box(x, training=self.training) # shape=(1, 248, 296, 14) # max: 0.546966 min:-0.55427 sum -16209.395
-        cls_preds = self.conv_cls(x, training=self.training) # shape=(1, 248, 296, 2) # max: 0.34346563 min: -0.2972044 sum 2415.1047
+        inputs = tf.transpose(inputs,(0,2,3,1)) 
+        b1 = self.block1(inputs, training=self.training) # TensorShape([1, 248, 296, 64])
 
 
-        # [N, C, y(H), x(W)]
-        #box_preds = tf.transpose(box_preds,(0, 2, 3, 1))x
-        #cls_preds = tf.transpose(cls_preds,(0, 2, 3, 1))x
+        b1_up = self.deconv1(b1, training=self.training) # TensorShape([1, 248, 296, 128])
+        b2 = self.block2(b1, training=self.training) # shape=(1, 124, 148, 128) 
+        b2_up = self.deconv2(b2, training=self.training) #shape=(1, 248, 296, 128) 
+        b3 = self.block3(b2, training=self.training) # shape=(1, 62, 74, 256) 
+        b3_up = self.deconv3(b3, training=self.training) # shape=(1, 248, 296, 128)
+        b_conc = tf.concat([b1_up, b2_up, b3_up], axis=3) # shape=(1, 248, 296, 384) 
+
+        box_preds = self.conv_box(b_conc, training=self.training) # shape=(1, 248, 296, 14) 
+        cls_preds = self.conv_cls(b_conc, training=self.training) # shape=(1, 248, 296, 2) 
+
         ret_dict = {
             "box_preds": box_preds,
             "cls_preds": cls_preds,
         }
         if self._use_direction_classifier:
-            dir_cls_preds = self.conv_dir_cls(x) # min: -0.58598 max: 0.3606874
-            #dir_cls_preds = tf.transpose(dir_cls_preds(0, 2, 3, 1))
-            ret_dict["dir_cls_preds"] = dir_cls_preds # TensorShape([1, 248, 296, 8])x
+            dir_cls_preds = self.conv_dir_cls(b_conc) 
+            ret_dict["dir_cls_preds"] = dir_cls_preds # TensorShape([1, 248, 296, 8])
         return ret_dict 
 
  # debug
@@ -758,7 +725,6 @@ class VoxelNet(tf.keras.Model):
 
         self.encode_background_as_zeros = self.config["model"]["second"]["encode_background_as_zeros"]
         self.use_direction_classifier = config["model"]["second"]["use_direction_classifier"]
-        self.use_rotate_nms = self.config["model"]["second"]["use_rotate_nms"]
         self.use_multi_class_nms = self.config["model"]["second"]["use_multi_class_nms"]
         self.nms_score_threshold = self.config["model"]["second"]["nms_score_threshold"]
         self.nms_pre_max_size = self.config["model"]["second"]["nms_pre_max_size"]
@@ -768,8 +734,13 @@ class VoxelNet(tf.keras.Model):
 
         # eval params
         self.measure_time_extended = self.config["measure_time_extended"]
-
-
+        
+        #debug
+        if self.measure_time_extended:
+            self.t_nms_func_list = []
+            self.t_voxel_features_list = []
+            self.t_spatial_features_list = []
+            self.t_rpn_list = []
 
         # ------------------------------------------------------------------------------------------------------
         # Create Loss Object
@@ -790,17 +761,18 @@ class VoxelNet(tf.keras.Model):
                 config=config,
                 num_input_filters=num_rpn_input_filters,
                 training=training)
-
         
-
-
         # ------------------------------------------------------------------------------------------------------
-        # save the model
+        # Set NMS function
         # ------------------------------------------------------------------------------------------------------
-
+        
+        self.nms_func = nms
+        
+        # ------------------------------------------------------------------------------------------------------
+        # Experiments with tflite
+        # ------------------------------------------------------------------------------------------------------
 
         #tf.keras.models.save_model(model, filepath)
-
 
         # ------------------------------------------------------------------------------------------------------
         # laod the model
@@ -830,17 +802,35 @@ class VoxelNet(tf.keras.Model):
         # # Get input and output tensors.
         # self.rpn_output_details = self.rpn.get_output_details()
 
-        
-        # debug
-        self.t_nms_func_list = []
-        self.t_voxel_features_list = []
-        self.t_spatial_features_list = []
-        self.t_rpn_list = []
-        self.writer = writer
-        #print(self.rpn.summary())
+    # =========================================
+    def print_profile_time(self,function_name, time):
+        if function_name == "t_voxel_features":
+            t_voxel_features = current_milli_time() - time
+            self.t_voxel_features_list.append(t_voxel_features)
+            if len(self.t_voxel_features_list) > 1:
+                t_voxel_features_avg = round(sum(self.t_voxel_features_list[1:])/len(self.t_voxel_features_list[1:]),2)
+                tf.print(f't_voxel_features: {t_voxel_features_avg}')
+        if function_name == "t_spatial_features":
+            t_spatial_features = current_milli_time() - time
+            self.t_spatial_features_list.append(t_spatial_features)
+            if len(self.t_spatial_features_list) > 1:
+                t_spatial_features_avg = round(sum(self.t_spatial_features_list[1:])/len(self.t_spatial_features_list[1:]),2)
+                tf.print(f't_spatial_features: {t_spatial_features_avg}')
+        if function_name == "t_rpn":
+            t_rpn = current_milli_time() - time
+            self.t_rpn_list.append(t_rpn)
+            if len(self.t_rpn_list) > 1:
+                t_rpn_avg = round(sum(self.t_rpn_list[1:])/len(self.t_rpn_list[1:]),2)
+                tf.print(f't_rpn: {t_rpn_avg}')
+        if function_name == "t_nms_func":
+            t_nms_func = current_milli_time() - t_nms_func
+            self.t_nms_func_list.append(t_nms_func)
+            if len(self.t_nms_func_list) > 1:
+                t_nms_func_avg = round(sum(self.t_nms_func_list[1:])/len(self.t_nms_func_list[1:]),2)
+                print(f't_nms_func: {t_nms_func_avg}')
     
+    # =========================================
     def call(self, voxels,num_points,coors,batch_anchors,labels= None,reg_targets=None):
-
 
         # ------------------------------------------------------------------------------------------------------
         # set params
@@ -854,33 +844,30 @@ class VoxelNet(tf.keras.Model):
         # Output: [voxels, filters]
         # ------------------------------------------------------------------------------------------------------
 
+        # debug
         if self.measure_time_extended: t_voxel_features = current_milli_time()
 
         voxel_features = self.voxel_feature_extractor(voxels, num_points, coors)
 
+        # debug
         if self.measure_time_extended: 
-            t_voxel_features = current_milli_time() - t_voxel_features
-            self.t_voxel_features_list.append(t_voxel_features)
-            if len(self.t_voxel_features_list) > 1:
-                t_voxel_features_avg = round(sum(self.t_voxel_features_list[1:])/len(self.t_voxel_features_list[1:]),2)
-                tf.print(f't_voxel_features: {t_voxel_features_avg}')
+            self.print_profile_time("t_voxel_features",t_voxel_features)
             
         # ------------------------------------------------------------------------------------------------------
         # Apply Backbone / Middle feature Extractor
         # Output: [batch_size, filter/channel, width, height] 
         # ------------------------------------------------------------------------------------------------------
 
+        # debug
         if self.measure_time_extended: t_spatial_features = current_milli_time()
 
         spatial_features = self.middle_feature_extractor(
                 voxel_features, coors)
 
-        if self.measure_time_extended: 
-            t_spatial_features = current_milli_time() - t_spatial_features
-            self.t_spatial_features_list.append(t_spatial_features)
-            if len(self.t_spatial_features_list) > 1:
-                t_spatial_features_avg = round(sum(self.t_spatial_features_list[1:])/len(self.t_spatial_features_list[1:]),2)
-                tf.print(f't_spatial_features: {t_spatial_features_avg}')
+        # debug
+        if self.measure_time_extended:
+            self.print_profile_time("t_spatial_features",t_spatial_features) 
+      
 
         # ------------------------------------------------------------------------------------------------------
         # Apply RPN
@@ -896,12 +883,8 @@ class VoxelNet(tf.keras.Model):
         preds_dict = self.rpn(spatial_features)
 
         if self.measure_time_extended: 
-            t_rpn = current_milli_time() - t_rpn
-            self.t_rpn_list.append(t_rpn)
-            if len(self.t_rpn_list) > 1:
-                t_rpn_avg = round(sum(self.t_rpn_list[1:])/len(self.t_rpn_list[1:]),2)
-                tf.print(f't_rpn: {t_rpn_avg}')
-
+            self.print_profile_time("t_rpn",t_rpn) 
+         
         # ------------------------------------------------------------------------------------------------------
         # use tflite rpn model instead
         # ------------------------------------------------------------------------------------------------------
@@ -961,16 +944,8 @@ class VoxelNet(tf.keras.Model):
                 batch_size = self.batch_size
             )
 
-            
-            # debug
-            # tf.print("loc_loss z error: ", tf.reduce_mean(loc_loss[:,:,2]), output_stream=sys.stdout)
-            # z_preds = tf.reshape(box_preds,(2,-1,7))[...,2][tf.equal(reg_weights,tf.reduce_max(reg_weights))]
-            # z_targets = tf.reshape(reg_targets,(2,-1,7))[...,2][tf.equal(reg_weights,tf.reduce_max(reg_weights))]
-            # #print("z_preds: %s z_targets: %s" % (str(z_preds.numpy()),str(z_targets.numpy())))
-            # tf.print("mean error: ", tf.reduce_mean(z_preds-z_targets), " z_preds_mean: ", tf.reduce_mean(z_preds), " z_targets_mean: ", tf.reduce_mean(z_targets), output_stream=sys.stdout)
-            
             # ------------------------------------------------------------------------------------------------------
-            # Sum Up all location losses and normalize
+            # LOCATION LOSS # Sum Up all location losses and normalize
             # ------------------------------------------------------------------------------------------------------
 
             loc_loss_reduced = tf.math.reduce_sum(loc_loss) / self.batch_size 
@@ -983,7 +958,7 @@ class VoxelNet(tf.keras.Model):
             cls_pos_loss, cls_neg_loss = _get_pos_neg_loss(cls_loss, labels)  # Not used, just for debugging
 
             # ------------------------------------------------------------------------------------------------------
-            # Sum Up all classification losses, normalize and apply weight
+            # CLASSIFICATION LOSS # Sum Up all classification losses, normalize and apply weight
             # ------------------------------------------------------------------------------------------------------
             
             cls_loss_reduced = tf.math.reduce_sum(cls_loss) / self.batch_size
@@ -1034,11 +1009,12 @@ class VoxelNet(tf.keras.Model):
                     dir_logits, dir_targets, weights=weights)
 
                 # ------------------------------------------------------------------------------------------------------
-                # Sum Up all dir losses, normalize and apply weight
+                # DIRECTION LOSS # Sum Up all dir losses, normalize and apply weight
                 # ------------------------------------------------------------------------------------------------------
 
                 dir_loss = tf.math.reduce_sum(dir_loss) / tf.cast(batch_size_dev,tf.float32)
-                loss += dir_loss * self.config["model"]["second"]["direction_loss_weight"]
+                dir_loss *= self.config["model"]["second"]["direction_loss_weight"]
+                loss = loss + dir_loss
 
             # retrun loss for optimizer. Note, that just the "loss" is used for optimization
             
@@ -1054,32 +1030,21 @@ class VoxelNet(tf.keras.Model):
                 "loc_loss_reduced": loc_loss_reduced, # Sum of location losses [float]
                 "cared": cared, # Filter for non_cares(-1) [batch_size, n_anchor]
             }
+            
+        # ------------------------------------------------------------------------------------------------------
+        # if we are in eval mode -> do not calc loss
+        # ------------------------------------------------------------------------------------------------------
+        
         else:
-
-            #return self.predict(example, preds_dict) #  DEBUG: last dim of preds_dict are 28,8,8
-            return preds_dict #  DEBUG: last dim of preds_dict are 28,8,8
+            return preds_dict 
 
    
-    
+    # =========================================
     def predict(self, example, preds_dict):
         #[1:num_points, 2:coordinates, 3:rect, 4:Trv2c, 5:P2, 6:anchors, 7:anchors_mask, 8:image_idx, 9:image_shape]
 
         # ------------------------------------------------------------------------------------------------------
-        # convert example to dictionary
-        # ------------------------------------------------------------------------------------------------------
-
-        # example = {
-        #         "rect" : example[3].numpy(),
-        #         "Trv2c" : example[4].numpy(),
-        #         "P2" : example[5].numpy(),
-        #         "anchors" : example[6].numpy(),
-        #         "anchors_mask" : example[7].numpy(),
-        #         "batch_idx" : example[8].numpy(),
-        #         "image_shape" : example[9].numpy()
-        # }
-
-        # ------------------------------------------------------------------------------------------------------
-        # set params
+        # convert params outputs to numpy
         # ------------------------------------------------------------------------------------------------------
         
         batch_anchors = example[6].numpy()
@@ -1094,7 +1059,7 @@ class VoxelNet(tf.keras.Model):
             num_class_with_bg = self.config["num_class"] + 1
 
         # ------------------------------------------------------------------------------------------------------
-        # get network outputs
+        # convert network outputs to numpy
         # ------------------------------------------------------------------------------------------------------
 
         batch_box_preds = preds_dict["box_preds"].numpy()
@@ -1113,10 +1078,8 @@ class VoxelNet(tf.keras.Model):
         else:
             batch_dir_preds = [None] * batch_size
         
+        # emty holder for final predictions
         predictions_dicts = []
-        
-        
-
 
         # ------------------------------------------------------------------------------------------------------
         # iterate over each pointcloud in batch
@@ -1127,7 +1090,6 @@ class VoxelNet(tf.keras.Model):
             # ------------------------------------------------------------------------------------------------------
             # get prediction of this single pointcloud
             # ------------------------------------------------------------------------------------------------------
-
             
             box_preds=batch_box_preds[batch_idx,...]
             anchors=batch_anchors[batch_idx,...]
@@ -1149,10 +1111,6 @@ class VoxelNet(tf.keras.Model):
                 cls_preds = cls_preds[[a_mask_as_indices]]
                 anchors = anchors[[a_mask_as_indices]]
 
-                # box_preds = tf.boolean_mask(box_preds, a_mask, axis=0)
-                # cls_preds = tf.boolean_mask(cls_preds, a_mask, axis=0)
-
-            
             # ------------------------------------------------------------------------------------------------------
             # Mask dir_preds with feature map mask from dataloader
             # ------------------------------------------------------------------------------------------------------
@@ -1160,8 +1118,7 @@ class VoxelNet(tf.keras.Model):
             if self.use_direction_classifier: # (here true)
                 if a_mask is not None:
                     dir_preds = dir_preds[[a_mask_as_indices]]
-                    #dir_preds = tf.boolean_mask(dir_preds, a_mask, axis=0)
-
+                    
                 # ------------------------------------------------------------------------------------------------------
                 # Use max to get direction predictions
                 # ------------------------------------------------------------------------------------------------------
@@ -1173,9 +1130,6 @@ class VoxelNet(tf.keras.Model):
             # ------------------------------------------------------------------------------------------------------
 
             if self.encode_background_as_zeros: # (here true)
-                # this don't support softmax
-                #assert self.config["model"]["second"]["use_sigmoid_score"] is True
-                #total_scores = tf.math.sigmoid(cls_preds)
                 total_scores = np.apply_along_axis(sigmoid_array, 0, cls_preds)
 
             else: # TODO convert to numpy 
@@ -1185,22 +1139,11 @@ class VoxelNet(tf.keras.Model):
                 else:
                     total_scores = tf.nn.softmax(cls_preds, axis=-1)[..., 1:]
             
-           
-            # ------------------------------------------------------------------------------------------------------
-            # Set NMS function
-            # ------------------------------------------------------------------------------------------------------
             
-            # Apply NMS in birdeye view
-            if self.use_rotate_nms: # (here false)
-                # not used
-                nms_func = box_torch_ops.rotate_nms
-            else:
-                nms_func = nms
 
             # ------------------------------------------------------------------------------------------------------
             # Set Placeholder for boxes
             # ------------------------------------------------------------------------------------------------------
-
 
             selected_boxes = None
             selected_labels = None
@@ -1243,6 +1186,7 @@ class VoxelNet(tf.keras.Model):
 
                 # ------------------------------------------------------------------------------------------------------
                 # only keep the top n score predictions
+                # TODO why Im doin this again? wouldnt it be better to filter as much as possible?
                 # ------------------------------------------------------------------------------------------------------
 
                 top_n_scores = np.argpartition(top_scores, -100)[-100:]
@@ -1254,10 +1198,8 @@ class VoxelNet(tf.keras.Model):
                 top_labels = top_labels[[top_n_scores]]
 
                 # ------------------------------------------------------------------------------------------------------
-                # If there are top_scores left, we take box_preds, dir_labels, top_labels according to the nms_score_threshold filter
+                # If there are top_scores left
                 # ------------------------------------------------------------------------------------------------------
-
-                
 
                 if top_scores.shape[0] != 0:
 
@@ -1267,12 +1209,6 @@ class VoxelNet(tf.keras.Model):
 
                     
                     box_preds = second_box_decode(box_preds,anchors)
-                        
-
-                    # tf.reduce_mean(tf.boolean_mask(batch_box_preds[0,:,2],batch_anchors_mask[batch_idx,...])[top_scores_keep])
-                    # e0: 0.0039
-                    # e1: -0.36
-                    # e2: -0.79
 
                     # ------------------------------------------------------------------------------------------------------
                     # We take everything from the location predictions but z and height to calc nms
@@ -1280,23 +1216,21 @@ class VoxelNet(tf.keras.Model):
 
                     boxes_for_nms = box_preds[...,[0, 1, 3, 4, 6]]
                     
-                    if not self.use_rotate_nms: # (here true)
-                        
-                        # ------------------------------------------------------------------------------------------------------
-                        # calculate x,y corners (4) of predictions based on x,y,w,l,r predictions
-                        # ------------------------------------------------------------------------------------------------------
-                        
-                        box_preds_corners = center_to_corner_box2d(
-                            boxes_for_nms[:, :2], boxes_for_nms[:, 2:4],
-                            boxes_for_nms[:, 4]) # [predictions, 4, 2]
+                    # ------------------------------------------------------------------------------------------------------
+                    # calculate x,y corners (4) of predictions based on x,y,w,l,r predictions
+                    # ------------------------------------------------------------------------------------------------------
+                    
+                    box_preds_corners = center_to_corner_box2d(
+                        boxes_for_nms[:, :2], boxes_for_nms[:, 2:4],
+                        boxes_for_nms[:, 4]) # [predictions, 4, 2]
 
-                        # ------------------------------------------------------------------------------------------------------
-                        # Calculate maximum x and y and minimum x and y for every predicted bb (in other words left upper and
-                        # lower right corner)
-                        # ------------------------------------------------------------------------------------------------------
+                    # ------------------------------------------------------------------------------------------------------
+                    # Calculate maximum x and y and minimum x and y for every predicted bb (in other words left upper and
+                    # lower right corner)
+                    # ------------------------------------------------------------------------------------------------------
 
-                        boxes_for_nms = corner_to_standup_nd_jit(
-                            box_preds_corners) # [predictions,4]
+                    boxes_for_nms = corner_to_standup_nd_jit(
+                        box_preds_corners) # [predictions,4]
 
                     # ------------------------------------------------------------------------------------------------------
                     # Apply nms (removes overlapping boxes with "nms_iou_threshold")
@@ -1304,11 +1238,9 @@ class VoxelNet(tf.keras.Model):
                     # Answer: No, since 0 is not background but the label of class 1 instead
                     # ------------------------------------------------------------------------------------------------------
 
-                    # boxes_for_nms_t = tf.convert_to_tensor(boxes_for_nms)
-                    # top_scores_t = tf.convert_to_tensor(top_scores)
                     if self.measure_time_extended: t_nms_func = current_milli_time()
 
-                    selected = nms_func(
+                    selected = self.nms_func(
                         boxes_for_nms,
                         top_scores,
                         pre_max_size=self.nms_pre_max_size,
@@ -1317,12 +1249,8 @@ class VoxelNet(tf.keras.Model):
                     )
                     
                     if self.measure_time_extended: 
-                        t_nms_func = current_milli_time() - t_nms_func
-                        self.t_nms_func_list.append(t_nms_func)
-                        if len(self.t_nms_func_list) > 1:
-                            t_nms_func_avg = round(sum(self.t_nms_func_list[1:])/len(self.t_nms_func_list[1:]),2)
-                            print(f't_nms_func: {t_nms_func_avg}')
-
+                        self.print_profile_time("t_nms_func",t_nms_func) 
+                     
                 # ------------------------------------------------------------------------------------------------------
                 # If there are no top_scores left return None
                 # ------------------------------------------------------------------------------------------------------
@@ -1349,6 +1277,7 @@ class VoxelNet(tf.keras.Model):
                 box_preds = selected_boxes
                 scores = selected_scores
                 label_preds = selected_labels
+                # print(scores)
                 if self.use_direction_classifier:
                     dir_labels = selected_dir_labels
 
@@ -1397,8 +1326,6 @@ class VoxelNet(tf.keras.Model):
                 # box_corners = center_to_corner_box3d(
                 #     locs, dims, angles, camera_box_origin, axis=1)
 
-            
-
                 # # ------------------------------------------------------------------------------------------------------
                 # # get the 8 2D corners (x,y) of the bboxes projected to the image plane
                 # # TODO: This is not important 
@@ -1407,14 +1334,9 @@ class VoxelNet(tf.keras.Model):
                 # box_corners_in_image = project_to_image(
                 #     box_corners, P2) # [N, 8, 2]
 
-
                 # # ------------------------------------------------------------------------------------------------------
                 # # get the 2 2D corners (x,y) of the bboxes projected to the image plane
                 # # ------------------------------------------------------------------------------------------------------
-
-                # minxy = np.min(box_corners_in_image, axis=1) # [N, 2]
-                # maxxy = np.min(box_corners_in_image, axis=1) # [N, 2]
-                # box_2d_preds = np.concatenate([minxy, maxxy], axis=1)
 
                 box_2d_preds_fake = []
 

@@ -150,6 +150,7 @@ class PillarFeatureNet(tf.keras.Model):
 
         # ------------------------------------------------------------------------------------------------------
         # Find mean of each voxel in 2D (x/y)) (depending on its points)
+        # In tf super hard to do, thats why it looks a little messy, should be fast anyways though
         # ------------------------------------------------------------------------------------------------------
 
         f_center = tf.zeros(tf.shape(voxels[:, :, :2]))
@@ -182,12 +183,10 @@ class PillarFeatureNet(tf.keras.Model):
 
         # not used:
         if self.with_distance: # is false here
-            points_dist = tf.norm(voxels[:, :, :3], ord=2, axis=2, keepdims=True) # Matthes: ord=2 is not probably equivalent to original code:
+            points_dist = tf.norm(voxels[:, :, :3], ord=2, axis=2, keepdims=True)
             #points_dist = torch.norm(voxels[:, :, :3], 2, 2, keepdim=True)
             voxels_ls.append(points_dist)
-        
-        # RESULT:
-        
+                
         # ------------------------------------------------------------------------------------------------------
         # Concatenate voxels
         # Difference to paper is that reflectance is missing, hence only 8 voxels
@@ -331,8 +330,6 @@ class PointPillarsScatter(tf.keras.Model):
 
         # Undo the column stacking to final 4-dim tensor
         batch_canvas = tf.reshape(batch_canvas, (self.batch_size, self.nchannels, self.ny, self.nx))
-
-        
 
         # ------------------------------------------------------------------------------------------------------
         # return feature map

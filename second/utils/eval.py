@@ -3,6 +3,8 @@ import time
 
 import numba
 import numpy as np
+import pickle
+
 
 from second.core.non_max_suppression.nms_gpu import rotate_iou_gpu_eval
 
@@ -717,6 +719,11 @@ def do_eval_v2(gt_annos,
                         min_overlaps, compute_aos)
     mAP_bev = get_mAP_v2(ret["precision"])
 
+    evaluation_detailed = {}
+    evaluation_detailed["precision_bev"] = ret["precision"]
+    # 
+    
+
     # ------------------------------------------------------------------------------------------------------
     # do AOS evaluation
     # ------------------------------------------------------------------------------------------------------
@@ -724,6 +731,7 @@ def do_eval_v2(gt_annos,
     mAP_aos = None
     if compute_aos:
         mAP_aos = get_mAP_v2(ret["orientation"])
+    evaluation_detailed["orientation"] = ret["orientation"]
 
     # ------------------------------------------------------------------------------------------------------
     # do 3D evaluation
@@ -732,8 +740,12 @@ def do_eval_v2(gt_annos,
     ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 2,
                         min_overlaps)
     mAP_3d = get_mAP_v2(ret["precision"])
+    evaluation_detailed["precision_3d"] = ret["precision"]
 
-    
+
+    with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_496/out_dir_checkpoints/model_result_21_detailed.h5", "wb") as file: 
+        pickle.dump(evaluation_detailed, file)
+
 
     # ------------------------------------------------------------------------------------------------------
     # return mAP
@@ -830,14 +842,25 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0
     # - following, overlap_0_7 and overlap_0_5 specify 2 separate evaluations
     # - in each of those: columns are classes and rows are [bbox,bev,3D]
     # ------------------------------------------------------------------------------------------------------
-    
-    overlap_0_7 = np.array([[0.7, 0.75, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+    overlap_0_75 = np.array([[0.7, 0.95, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.75, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.75, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7]])
+    overlap_0_70 = np.array([[0.7, 0.90, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.70, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.70, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7]])
+    overlap_0_65 = np.array([[0.7, 0.85, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.65, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.65, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7]])
+    overlap_0_60 = np.array([[0.7, 0.80, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.60, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
+                            [0.7, 0.60, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7]])
+    overlap_0_55 = np.array([[0.7, 0.75, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
                             [0.7, 0.55, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7],
                             [0.7, 0.55, 0.5, 0.7, 0.5, 0.7, 0.7, 0.7]])
-    overlap_0_5 = np.array([[0.7, 0.9, 0.5, 0.7, 0.5, 0.5, 0.5, 0.5],
-                            [0.5, 0.7, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5],
-                            [0.5, 0.7, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5]])
-    min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
+    overlap_0_5 = np.array([[0.7, 0.7, 0.5, 0.7, 0.5, 0.5, 0.5, 0.5],
+                            [0.5, 0.5, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5],
+                            [0.5, 0.5, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5]])
+    min_overlaps = np.stack([overlap_0_5, overlap_0_55, overlap_0_60, overlap_0_65, overlap_0_70, overlap_0_75], axis=0)  # [2, 3, 5]
     class_to_name = {
         0: 'Car',
         1: 'Pedestrian',

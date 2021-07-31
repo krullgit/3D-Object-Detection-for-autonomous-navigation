@@ -12,6 +12,10 @@ import yaml
 import json
 import time
 import tensorboard
+import wandb
+# from wandb.keras import WandbCallback
+
+
 import gc
 
 # disable GPU
@@ -42,9 +46,9 @@ from tensorflow.keras.applications.resnet50 import ResNet50
 # imports from own codebase
 from load_data import dataLoader, DataBaseSamplerV2
 # metrics is currently not used
-# from libraries.metrics import update_metrics, Accuracy, PrecisionRecall, Scalar
+
 from libraries.eval_helper_functions import predict_kitti_to_anno, progressBar, send_3d_bbox, box_camera_to_lidar, remove_low_score
-from libraries.train_helper_functions import create_out_dir_base, create_model_dirs_training, create_model_dirs_eval
+from libraries.train_helper_functions import create_out_dir_base, create_model_dirs_training, create_model_dirs_eval, create_wandb_config, log_wandb_loss, log_wandb_eval
 from model.voxelnet import VoxelNet
 from second.utils.eval import get_official_eval_result, get_coco_eval_result
 
@@ -115,7 +119,7 @@ def train(config_path):
 
 
     # Create a class which which creates new augmented examples of objects which are placed in the dataset
-    sampler_class = DataBaseSamplerV2(sampler_info_path)
+    sampler_class = DataBaseSamplerV2(sampler_info_path, config["train_input_reader"])
 
 
     # create the dataLoader object which is reponsible for loading datapoints
@@ -139,13 +143,23 @@ def train(config_path):
 
 
     # ------------------------------------------------------------------------------------------------------
-    #  Create network
+    #  Setup Logging with wandb and tensorboard
     # ------------------------------------------------------------------------------------------------------ 
 
-    writer = tf.summary.create_file_writer(out_dir_logs)
+    # setup wandb
+    wandb_config=create_wandb_config(config)
+    wandb.init(project='thesis', entity='makr06', config=wandb_config, name=model_id+"")
 
+    # setup tensorbaord
+    # writer = tf.summary.create_file_writer(out_dir_logs)
+    writer = None # I use wandb instead of tensorboard now
+    
+    # ------------------------------------------------------------------------------------------------------
+    #  Create network
+    # ------------------------------------------------------------------------------------------------------ 
+    
     net = VoxelNet(config, writer)
-
+    
     # ------------------------------------------------------------------------------------------------------
     #  Create Optimizer
     # ------------------------------------------------------------------------------------------------------ 
@@ -167,29 +181,19 @@ def train(config_path):
                 weight_decay =          config["train_config"]["optimizer"]["adam_optimizer"]["weight_decay"],
                 epsilon=                1e-08
                 )
-                
-    # ------------------------------------------------------------------------------------------------------
-    # Create Metrics Classes
-    # Does not seem to be very usefull, hence its commented
-    # ------------------------------------------------------------------------------------------------------ 
-
-    # rpn_acc = Accuracy(config)
-    # rpn_metrics = PrecisionRecall(config)
-    # rpn_cls_loss = Scalar()
-    # rpn_loc_loss = Scalar()
-    # rpn_total_loss = Scalar()                                                                                                      
-
+    
     # DEBUG PARAMS
-    log_weights_and_bias = False
+    log_weights_and_bias = True
     from_file_mode = False # True will repeat the element form test_batch_in_file
     take_first = False # True will repeat the first element form data_iterator
     example_first = None # do not change
+    
     load_weights = config["load_weights"]
     load_weights_finished = False # This variable is part of a tensorflow workaround caused by subclassing keras.model
     if from_file_mode:
         with open("test_batch_in_file", "rb") as file:
             data_iterator = pickle.load(file)
-
+    
     # ------------------------------------------------------------------------------------------------------
     #  We wrap a training step in a tf.function to to gain speedups (5x)
     # ------------------------------------------------------------------------------------------------------ 
@@ -225,7 +229,7 @@ def train(config_path):
         # ------------------------------------------------------------------------------------------------------
 
         #gradients = [tf.clip_by_value(grad, -0.1, +0.1) for grad in gradients]
-        gradients = [tf.clip_by_norm(grad, 1) for grad in gradients]
+        # gradients = [tf.clip_by_norm(grad, 1) for grad in gradients]
         
         # ------------------------------------------------------------------------------------------------------
         #  Backpropagation
@@ -235,7 +239,7 @@ def train(config_path):
         optimizer.apply_gradients(zip(gradients, net.trainable_variables))
 
         # return losses etc.
-        return (cls_preds, loss, cls_loss_reduced, loc_loss_reduced, cared, loc_loss)
+        return (cls_preds, loss, cls_loss_reduced, loc_loss_reduced, cared, loc_loss, dir_loss_reduced)
 
     # ------------------------------------------------------------------------------------------------------
     #  EPOCH ITERATOR Settings
@@ -301,73 +305,27 @@ def train(config_path):
             #  Run Model and create Loss
             # ------------------------------------------------------------------------------------------------------
             
-            cls_preds, loss, cls_loss_reduced, loc_loss_reduced, cared, loc_loss = trainStep(example[0],example[1],example[2],example[6],example[8],example[9])
-
-            #debug
-            # CURRENT
-            #print("x_loss: %f y_loss %f z_loss %f" % (tf.reduce_sum(loc_loss[...,0]),tf.reduce_sum(loc_loss[...,1]),tf.reduce_sum(loc_loss[...,2])))
+            cls_preds, loss, cls_loss_reduced, loc_loss_reduced, cared, loc_loss, dir_loss_reduced = trainStep(example[0],example[1],example[2],example[6],example[8],example[9])
 
             # ------------------------------------------------------------------------------------------------------
-            # print the progress of the training
+            # log the progress of the training
             # ------------------------------------------------------------------------------------------------------
 
-            print_loss = str(loss.numpy())
-            print_step_current = str(step_current)
-            print_steps_left = str(-1*step_current+int((dataset_ori.ndata/batch_size)*(epoch_idx+1)))
-            print_epoch_current = str(epoch_idx)
-            print_epoch_total = str(epochs_total)
             print_learning_rate = str(lr_schedule(step_current).numpy())
-
-            if step_current % 10 == 0:
+            if step_current % 200 == 0:
+                print_steps_left = str(-1*step_current+int((dataset_ori.ndata/batch_size)*(epoch_idx+1)))
                 print("**********************************************")
-                print("* LOSS: {} Step/left: {}/{} Epoch/total: {}/{} LR: {}".format(print_loss,print_step_current,print_steps_left,print_epoch_current,print_epoch_total,print_learning_rate))            
+                print("* LOSS: {} Step/left: {}/{} Epoch/total: {}/{} LR: {}".format(str(loss.numpy()),str(step_current),print_steps_left,str(epoch_idx),str(epochs_total),print_learning_rate))            
                 print("**********************************************")
                 
-            # DEBUG
-            # if log_weights_and_bias:
-            #     with writer.as_default():
-            #         for i, weights in enumerate(net.trainable_variables):
-            #             tf.summary.histogram("weight: " + weights.name, weights, step=step_current)
-            #             tf.summary.histogram("gradient: " + weights.name, gradients[i], step=step_current)
-            #             tf.summary.scalar("LOSS: loss", loss, step=step_current)
-            #             tf.summary.scalar("LOSS: cls_loss_reduced", cls_loss_reduced, step=step_current)
-            #             tf.summary.scalar("LOSS: loc_loss_reduced", loc_loss_reduced, step=step_current)
-            #             tf.summary.scalar("LOSS: cls_pos_loss", cls_pos_loss, step=step_current)
-            #             tf.summary.scalar("LOSS: cls_neg_loss", cls_neg_loss, step=step_current)
-            #             tf.summary.histogram("LOSS: loc_loss", loc_loss, step=step_current)
-            #             tf.summary.histogram("LOSS: cls_loss", cls_loss, step=step_current)
-            #             tf.summary.histogram("LOSS: cared", cared, step=step_current)
+            if log_weights_and_bias:
+                log_wandb_loss(step_current, wandb,epoch_idx,loc_loss_reduced,cls_loss_reduced,dir_loss_reduced,loss,print_learning_rate)  
 
-            # debug
             if step_current is not 0: # skip step 1 since it takes always longer
                 _total_step_time += time.time() - t 
 
             # Update step
             step_current += 1
-
-            # ------------------------------------------------------------------------------------------------------
-            # Show Metrics
-            # Does not seem to be very usefull, hence its commented
-            # ------------------------------------------------------------------------------------------------------ 
-
-            # debug: check code_weights
-            # net.weighted_smooth_l1_localization_loss.code_weights
-
-            # if step_current % config["train_config"]["net_metrics_steps"] == 0:
-            #     net_metrics = update_metrics(config, 
-            #                                 cls_loss_reduced,
-            #                                 loc_loss_reduced, 
-            #                                 cls_preds,
-            #                                 example[8],
-            #                                 cared,
-            #                                 rpn_acc,
-            #                                 rpn_metrics,
-            #                                 rpn_cls_loss,
-            #                                 rpn_loc_loss
-            #                                 )
-            #     print("step_current: %i" % step_current)
-            #     print(net_metrics)
-            #     print(f"_total_step_time time per example: {_total_step_time/(step_current-1):.3f}")
 
 
         # ------------------------------------------------------------------------------------------------------
@@ -382,16 +340,23 @@ def train(config_path):
             net.save_weights(out_dir_checkpoints+"/model_weights_temp.h5")
 
             # eval weights
-            eval_score, result = evaluate(config_path, model_id, epoch_idx=str(epoch_idx))
+            mAP3d, result, mAPbev, mAPaos = evaluate(config_path, model_id, epoch_idx=str(epoch_idx))
+            
+            # ------------------------------------------------------------------------------------------------------
+            # log eval result
+            # ------------------------------------------------------------------------------------------------------
+            
+            # get avg score
+            eval_score = (mAP3d[0][0].sum()+mAPaos[0][0].sum()+mAPbev[0][0].sum())/18
+            
+            if log_weights_and_bias:
+                log_wandb_eval(wandb,mAP3d,mAPaos,mAPbev,eval_score)
 
-            # get max score
-            eval_score = eval_score.sum()
 
             print("**********************************************")
             print("* Old Score: {} New Score: {}".format(str(best_eval_score),str(eval_score)))
             print("**********************************************")
 
-            
             # save Model weights if eval_score is better than last best score
             if eval_score > best_eval_score:
 
@@ -407,6 +372,10 @@ def train(config_path):
             # save eval results
             with open(out_dir_checkpoints+"/model_result_{}.txt".format(str(epoch_idx)), 'w') as file:
                 file.write(result)
+        
+        # ------------------------------------------------------------------------------------------------------
+        # DEBUG: always save weights, no matter if good or not
+        # ------------------------------------------------------------------------------------------------------
         
         # save Optimizer weights TODO
         with open(out_dir_checkpoints+"/optimizer_weights_{}.h5".format(str(epoch_idx)), "wb") as file: 
@@ -603,7 +572,6 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     print("* Load Model ID {}".format(str(model_id)))
     print("**********************************************")
 
-
     # set training to false -> eval mode
     training = False
 
@@ -626,7 +594,8 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     #  Load dataloader parameter and create dataloader
     # ------------------------------------------------------------------------------------------------------ 
 
-    limit = None # Options: {None,Int} # limit the amount of test data to be evaluated to save time
+    limit_begin = 750 # Options: {Int} # begin idx, to limit the amount of test data to be evaluated 
+    limit =None # Options: {None,Int} # end idx
     batch_size = config["eval_input_reader"]["batch_size"] 
     num_point_features = config["train_input_reader"]["num_point_features"]
     center_limit_range = config["model"]["second"]["post_center_limit_range"]
@@ -655,8 +624,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
 
     # create tensorboard writer for logging
     writer = tf.summary.create_file_writer(out_dir_base)
-
-
+    
     # create network
     net = VoxelNet(config, writer, training=training)
 
@@ -672,7 +640,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     
     max_number_of_points_per_voxel = config["model"]["second"]["voxel_generator"]["max_number_of_points_per_voxel"] 
 
-    # @tf.function(input_signature = [tf.TensorSpec(shape=[None,max_number_of_points_per_voxel,num_point_features], dtype=tf.float32),tf.TensorSpec(shape=[None,], dtype=tf.int32),tf.TensorSpec(shape=[None,4], dtype=tf.int32),tf.TensorSpec(shape=[None,None,7], dtype=tf.float32)])
+    @tf.function(input_signature = [tf.TensorSpec(shape=[None,max_number_of_points_per_voxel,num_point_features], dtype=tf.float32),tf.TensorSpec(shape=[None,], dtype=tf.int32),tf.TensorSpec(shape=[None,4], dtype=tf.int32),tf.TensorSpec(shape=[None,None,7], dtype=tf.float32)])
     def trainStep(voxels,num_points,coors,batch_anchors):
         preds_dict = net(voxels,num_points,coors,batch_anchors)
         return preds_dict
@@ -706,6 +674,10 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
 
     # Helper Variable to save the output of the network
     dt_annos = []
+    
+    # ------------------------------------------------------------------------------------------------------
+    # Profile Network TIme
+    # ------------------------------------------------------------------------------------------------------
 
     # eval params
     measure_time = config["measure_time"]
@@ -721,8 +693,9 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
 
 
     # ------------------------------------------------------------------------------------------------------
-    # ROS
+    # ROS setup, in case the prediction should be sent to rviz
     # ------------------------------------------------------------------------------------------------------
+    
     if production_mode:
         bb_pred_guess_1_pub = rospy.Publisher("bb_pred_guess_1", BoundingBoxArray)
         header = std_msgs.msg.Header()
@@ -735,142 +708,154 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     #  EPOCH ITERATOR
     # ------------------------------------------------------------------------------------------------------  
 
+    #example: [0:voxels, 1:num_points, 2:coordinates, 3:rect, 4:Trv2c, 5:P2, 6:anchors, 7:anchors_mask, 8:image_idx, 9:image_shape]
     for i, example in enumerate(data_iterator): 
-        # example: [0:voxels, 1:num_points, 2:coordinates, 3:rect, 4:Trv2c, 5:P2, 6:anchors, 7:anchors_mask, 8:image_idx, 9:image_shape]
         
-        if measure_time: 
-            if i > 0:
-                t_preprocess = current_milli_time() - t_preprocess
-                t_preprocess_list.append(t_preprocess)
-            else:
-                t_preprocess_list.append(0.0)
-
-        # save starting time to measure network speed
-        if measure_time: t_full_sample = current_milli_time()
-
-        # Progess Bar
-        if not production_mode:
-            if limit is None: 
-                progressBar(i,dataset_ori.ndata//batch_size)
-            else:
-                progressBar(i,limit)
-                if i == limit: break # consider the case for early exit
-       
-        # ------------------------------------------------------------------------------------------------------
-        #  Load Model Weights and Optimizer Weights (Checkpoint)
-        # ------------------------------------------------------------------------------------------------------
-
-        if load_weights_finished == False: # support variable, to check if the weights are loaded
-
-            # initialize the model # TODO delete?
-            #net(example[0],example[1],example[2],example[6],example[8],example[9])
-            net(example[0],example[1],example[2],example[6])
-            load_weights_finished = True
-
-            # load the weights depending on if we are in training mode since
-            # if yes the "model_weights_temp" file needs to be evaluated 
-            model_dir = ""
-            if model_id_memory == None: # for explaination, see variable "model_id_memory"
-                model_dir = out_dir_checkpoints + eval_checkpoint
-                net.load_weights(model_dir)
-            else:
-                model_dir = out_dir_checkpoints + "/model_weights_temp.h5"
-                net.load_weights(model_dir)
-
-            print("**********************************************")
-            print("* Model Loaded from Path: {}".format(model_dir))
-            print("**********************************************")
-
-
-        # ------------------------------------------------------------------------------------------------------
-        #  Run Network 
-        # ------------------------------------------------------------------------------------------------------
-
-        if measure_time: t_network = current_milli_time()
-
-        preds_dict = trainStep(example[0],example[1],example[2],example[6])
-
-        if measure_time:
-            t_network = current_milli_time() - t_network
-            t_network_list.append(t_network)
-
-        # ------------------------------------------------------------------------------------------------------
-        # Convert Network Output to predictions by applying the direction classifier to predictions of rotation 
-        # use nms to get the final bboxes
-        # ------------------------------------------------------------------------------------------------------
-
-        if measure_time: t_predict = current_milli_time()
-
-        # t_full_sample: 23.91, t_preprocess: 0.85, t_network: 12.54, t_predict: 10.46, t_anno: 0.84, t_rviz: 0.0
-        # t_full_sample: 23.54, t_preprocess: 1.13, t_network: 11.08, t_predict: 11.45, t_anno: 0.82, t_rviz: 0.01
-        predictions_dicts = net.predict(example,preds_dict) # list(predictions) of ['name', 'truncated', 'occluded', 'alpha', 'bbox', 'dimensions', 'location', 'rotation_y', 'score', 'image_idx'])
-
-        if measure_time:
-            t_predict = current_milli_time() -t_predict
-            t_predict_list.append(t_predict)
-        
-
-        # ------------------------------------------------------------------------------------------------------
-        # Convert Predictions to Kitti Annotation style 
-        # ------------------------------------------------------------------------------------------------------
-        
-        if measure_time: t_anno = current_milli_time()
-
-        dt_anno = predict_kitti_to_anno(example, desired_objects, predictions_dicts, None, False)
-
-        if measure_time:
-            t_anno = current_milli_time() -t_anno
-            t_anno_list.append(t_anno)
-        
-        # ------------------------------------------------------------------------------------------------------
-        # Send annotation to RVIZ
-        # ------------------------------------------------------------------------------------------------------
-
-        if measure_time: t_rviz = current_milli_time()
-
-        if production_mode:
-
-            dt_anno = remove_low_score(dt_anno[0], float(prediction_min_score))
-            # if len(dt_anno["score"]) > 0:
-            #    print(dt_anno["score"])
-            dims = dt_anno['dimensions']
-            loc = dt_anno['location']
-            rots = dt_anno['rotation_y']
-            boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1)
-            boxes_lidar = box_camera_to_lidar(boxes_camera, calib['R0_rect'],calib['Tr_velo_to_cam'])
-            centers,dims,angles = boxes_lidar[:, :3], boxes_lidar[:, 3:6], boxes_lidar[:, 6] # [a,b,c] -> [c,a,b] (camera to lidar coords)
+        # debug limit eval data
+        if i >= limit_begin:
             
-            # LIFT bounding boxes 
-            # - the postition of bboxes in the pipeline is at the z buttom of the bb and ros needs it at the z center
-            # - TODO: lift by height/2 and not just 1.0
+            # debug measure time
+            if measure_time: 
+                if i > 0:
+                    t_preprocess = current_milli_time() - t_preprocess
+                    t_preprocess_list.append(t_preprocess)
+                else:
+                    t_preprocess_list.append(0.0)
 
-            #centers = centers + [0.0,0.0,0.9]
-            send_3d_bbox(centers, dims, angles, bb_pred_guess_1_pub, header) 
-        else:
-            dt_annos += dt_anno
-        
-        if measure_time:
-            t_rviz = current_milli_time() -t_rviz
-            t_rviz_list.append(t_rviz)
-            
-            t_full_sample = current_milli_time() -t_full_sample
-            t_full_sample_list.append(t_full_sample)
-            
-            t_preprocess = current_milli_time()
+            # save starting time to measure network speed
+            if measure_time: t_full_sample = current_milli_time()
 
-        # ------------------------------------------------------------------------------------------------------
-        # Print times
-        # ------------------------------------------------------------------------------------------------------
-       
-        if i > 0 and measure_time: # we scipt the first network iteration (initialization)
-            t_full_sample_avg = round(sum(t_full_sample_list[1:])/len(t_full_sample_list[1:]),2)
-            t_preprocess_avg = round(sum(t_preprocess_list[1:])/len(t_preprocess_list[1:]),2)
-            t_network_avg = round(sum(t_network_list[1:])/len(t_network_list[1:]),2)
-            t_predict_avg = round(sum(t_predict_list[1:])/len(t_predict_list[1:]),2)
-            t_anno_avg = round(sum(t_anno_list[1:])/len(t_anno_list[1:]),2)
-            t_rviz_avg = round(sum(t_rviz_list[1:])/len(t_rviz_list[1:]),2)
+            # Progess Bar
+            if not production_mode:
+            
+                if limit is None: 
+                    progressBar(i-limit_begin,(dataset_ori.ndata-limit_begin)//batch_size)
+                else:
+                    progressBar(i-limit_begin,limit-limit_begin)
+                    if i == limit: break # consider the case for early exit
         
-            print(f't_full_sample: {t_full_sample_avg}, t_preprocess: {t_preprocess_avg}, t_network: {t_network_avg}, t_predict: {t_predict_avg}, t_anno: {t_anno_avg}, t_rviz: {t_rviz_avg}')
+            # ------------------------------------------------------------------------------------------------------
+            #  Load Model Weights and Optimizer Weights (Checkpoint)
+            # ------------------------------------------------------------------------------------------------------
+
+            if load_weights_finished == False: # support variable, to check if the weights are loaded
+
+                # run model one time to initialze it
+                net(example[0],example[1],example[2],example[6])
+                load_weights_finished = True
+
+                # load the weights depending on if we are in training mode since
+                # if yes the "model_weights_temp" file needs to be evaluated 
+                model_dir = ""
+                if model_id_memory == None: # for explaination, see variable "model_id_memory"
+                    model_dir = out_dir_checkpoints + eval_checkpoint  # for eval mode
+                    net.load_weights(model_dir)
+                else:
+                    model_dir = out_dir_checkpoints + "/model_weights_temp.h5" # for training mode
+                    net.load_weights(model_dir)
+
+                print("**********************************************")
+                print("* Model Loaded from Path: {}".format(model_dir))
+                print("**********************************************")
+
+            # ------------------------------------------------------------------------------------------------------
+            #  Run Network 
+            # ------------------------------------------------------------------------------------------------------
+
+            # debug
+            if measure_time: t_network = current_milli_time()
+
+            preds_dict = trainStep(example[0],example[1],example[2],example[6])
+
+            # debug
+            if measure_time:
+                t_network = current_milli_time() - t_network
+                t_network_list.append(t_network)
+
+            # ------------------------------------------------------------------------------------------------------
+            # Convert Network Output to predictions by applying the direction classifier to predictions of rotation 
+            # use nms to get the final bboxes
+            # ------------------------------------------------------------------------------------------------------
+
+            # debug
+            if measure_time: t_predict = current_milli_time()
+
+            # t_full_sample: 23.91, t_preprocess: 0.85, t_network: 12.54, t_predict: 10.46, t_anno: 0.84, t_rviz: 0.0
+            # t_full_sample: 23.54, t_preprocess: 1.13, t_network: 11.08, t_predict: 11.45, t_anno: 0.82, t_rviz: 0.01
+            predictions_dicts = net.predict(example,preds_dict) # list(predictions) of ['name', 'truncated', 'occluded', 'alpha', 'bbox', 'dimensions', 'location', 'rotation_y', 'score', 'image_idx'])
+
+            # debug
+            if measure_time:
+                t_predict = current_milli_time() -t_predict
+                t_predict_list.append(t_predict)
+            
+            # ------------------------------------------------------------------------------------------------------
+            # Convert Predictions to Kitti Annotation style 
+            # ------------------------------------------------------------------------------------------------------
+            
+            # debug
+            if measure_time: t_anno = current_milli_time()
+
+            dt_anno = predict_kitti_to_anno(example, desired_objects, predictions_dicts, None, False)
+
+            # debug
+            if measure_time:
+                t_anno = current_milli_time() -t_anno
+                t_anno_list.append(t_anno)
+            
+            # ------------------------------------------------------------------------------------------------------
+            # OPTIONAL: Send annotation to RVIZ
+            # ------------------------------------------------------------------------------------------------------
+
+            # debug
+            if measure_time: t_rviz = current_milli_time()
+
+            if production_mode:
+        
+                dt_anno = remove_low_score(dt_anno[0], float(prediction_min_score))
+                # if len(dt_anno["score"]) > 0:
+                #    print(dt_anno["score"])
+                dims = dt_anno['dimensions']
+                loc = dt_anno['location']
+                rots = dt_anno['rotation_y']
+                boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1)
+                boxes_lidar = box_camera_to_lidar(boxes_camera, calib['R0_rect'],calib['Tr_velo_to_cam'])
+                centers,dims,angles = boxes_lidar[:, :3], boxes_lidar[:, 3:6], boxes_lidar[:, 6] # [a,b,c] -> [c,a,b] (camera to lidar coords)
+                
+                # LIFT bounding boxes 
+                # - the postition of bboxes in the pipeline is at the z buttom of the bb and ros needs it at the z center
+                # - TODO: lift by height/2 and not just 1.0
+
+                centers = centers + [0.0,0.0,1.0]
+                send_3d_bbox(centers, dims, angles, bb_pred_guess_1_pub, header) 
+            
+            # ------------------------------------------------------------------------------------------------------
+            # OPTIONAL: save annotations for evaluation
+            # ------------------------------------------------------------------------------------------------------
+            else:
+                dt_annos += dt_anno
+            
+            # debug
+            if measure_time:
+                t_rviz = current_milli_time() -t_rviz
+                t_rviz_list.append(t_rviz)
+                t_full_sample = current_milli_time() -t_full_sample
+                t_full_sample_list.append(t_full_sample)
+                t_preprocess = current_milli_time()
+
+            # ------------------------------------------------------------------------------------------------------
+            # DEBUG: Print times
+            # ------------------------------------------------------------------------------------------------------
+        
+            if i > 0 and measure_time: # we scipt the first network iteration (initialization)
+                t_full_sample_avg = round(sum(t_full_sample_list[1:])/len(t_full_sample_list[1:]),2)
+                t_preprocess_avg = round(sum(t_preprocess_list[1:])/len(t_preprocess_list[1:]),2)
+                t_network_avg = round(sum(t_network_list[1:])/len(t_network_list[1:]),2)
+                t_predict_avg = round(sum(t_predict_list[1:])/len(t_predict_list[1:]),2)
+                t_anno_avg = round(sum(t_anno_list[1:])/len(t_anno_list[1:]),2)
+                t_rviz_avg = round(sum(t_rviz_list[1:])/len(t_rviz_list[1:]),2)
+            
+                print(f't_full_sample: {t_full_sample_avg}, t_preprocess: {t_preprocess_avg}, t_network: {t_network_avg}, t_predict: {t_predict_avg}, t_anno: {t_anno_avg}, t_rviz: {t_rviz_avg}')
 
     # ------------------------------------------------------------------------------------------------------
     # save the results in a file
@@ -893,21 +878,19 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
 
     # get all gt in dataset
     gt_annos = [info["annos"] for info in dataset_ori.img_list_and_infos]
-
     
-    # DEBUG
-    # This can limit the amount of test data to be evaluated to save time
+    # filter gt annos if we set a limit
     if limit is not None:
-        gt_annos = gt_annos[0:limit]
+        gt_annos = gt_annos[limit_begin:limit]
     else:
-        gt_annos = gt_annos[0:len(dt_annos)]
+        gt_annos = gt_annos[limit_begin:limit_begin+len(dt_annos)]
 
     # ------------------------------------------------------------------------------------------------------
-    # evaluate the predictions in KITTI? style
+    # evaluate the predictions in KITTI style
     # - AOS is average orientation similarity, bbox is 2D
     # - Results for the columns (difficulties) will be equal since we do not have OCCLUSION and TRUNCATION 
     #   annos in out ground truth which have influence on the difficulties
-    # - Input: dt_annos, gt_annos are in camera coors (in Lidar expression: (-y,-z,x))
+    # - Input: dt_annos, gt_annos are in camera coors (in Lidar coords)
     # ------------------------------------------------------------------------------------------------------
 
     compute_bbox = False # Since we dont have 2D box ground truth we don want to compute 2D bboxes results
@@ -926,7 +909,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     print(result1)
 
     # ------------------------------------------------------------------------------------------------------
-    # evaluate the predictions in COCO? style
+    # evaluate the predictions in COCO style
     # ------------------------------------------------------------------------------------------------------
 
     # result2 = get_coco_eval_result(gt_annos, dt_annos, desired_objects)
@@ -936,7 +919,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     # return results (only used during training)
     # ------------------------------------------------------------------------------------------------------
     
-    return (mAP3d,result1) 
+    return (mAP3d,result1, mAPbev, mAPaos) 
 
 
 
