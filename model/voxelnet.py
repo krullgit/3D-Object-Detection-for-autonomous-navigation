@@ -1,6 +1,9 @@
 ﻿import numpy as np
 import time
 
+from tensorflow.python.keras import regularizers
+from tensorflow.python.keras.constraints import UnitNorm
+
 
 # These import are needed RTX GPU'S ?:(
 from tensorflow.compat.v1 import ConfigProto
@@ -569,25 +572,30 @@ class RPN(tf.keras.Model):
 
         self.block1 = tf.keras.Sequential(name="block1")
         self.block1.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
-        self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3,strides=layer_strides[0], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
+        # self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3,strides=layer_strides[0], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
+        self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3, trainable=True,strides=layer_strides[0], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
         self.block1.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.block1.add(tf.keras.layers.ReLU())
+        # self.block1.add(Dropout(0.4))
 
         for i in range(layer_nums[0]):
             #self.block1.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
+            # self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
             self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
             self.block1.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
             self.block1.add(tf.keras.layers.ReLU())
+        # self.block1.add(Dropout(0.4))
 
         self.deconv1 = tf.keras.Sequential(name="deconv1")
         self.deconv1.add(tf.keras.layers.Conv2DTranspose(
                 filters=num_upsample_filters[0],
                 kernel_size=upsample_strides[0],
-                strides=upsample_strides[0],
+                strides=upsample_strides[0],    
                 kernel_initializer=keras.initializers.he_uniform(seed=None),
                 use_bias=use_bias_ConvTranspose2d))
         self.deconv1.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.deconv1.add(tf.keras.layers.ReLU())
+        # self.deconv1.add(Dropout(0.2))
 
         # ------------------------------------------------------------------------------------------------------
         # Block 2
@@ -595,15 +603,19 @@ class RPN(tf.keras.Model):
 
         self.block2 = tf.keras.Sequential(name="block2")
         self.block2.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
+        # self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,strides=layer_strides[1], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
         self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,strides=layer_strides[1], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
         self.block2.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.block2.add(tf.keras.layers.ReLU())
+        # self.block2.add(Dropout(0.4))
 
         for i in range(layer_nums[1]):
             #self.block2.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
+            # self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
             self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
             self.block2.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
             self.block2.add(tf.keras.layers.ReLU())
+        # self.block2.add(Dropout(0.4))
 
         self.deconv2 = tf.keras.Sequential(name="deconv2")
         self.deconv2.add(tf.keras.layers.Conv2DTranspose(
@@ -611,9 +623,10 @@ class RPN(tf.keras.Model):
                 kernel_size=upsample_strides[1],
                 strides=upsample_strides[1],
                 kernel_initializer=keras.initializers.he_uniform(seed=None),
-                use_bias=use_bias_ConvTranspose2d))
+                use_bias=use_bias_ConvTranspose2d),)
         self.deconv2.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.deconv2.add(tf.keras.layers.ReLU())
+        # self.deconv2.add(Dropout(0.2))
 
         # ------------------------------------------------------------------------------------------------------
         # Block 3
@@ -621,15 +634,19 @@ class RPN(tf.keras.Model):
 
         self.block3 = tf.keras.Sequential(name="block3")
         self.block3.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
+        # self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,strides=layer_strides[2], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
         self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,strides=layer_strides[2], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
         self.block3.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.block3.add(tf.keras.layers.ReLU())
+        # self.block3.add(Dropout(0.4))
 
         for i in range(layer_nums[2]):
             #self.block3.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
+            # self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
             self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
             self.block3.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
             self.block3.add(tf.keras.layers.ReLU())
+        # self.block3.add(Dropout(0.4))
 
         self.deconv3 = tf.keras.Sequential(name="deconv3")
         self.deconv3.add(tf.keras.layers.Conv2DTranspose(
@@ -640,6 +657,7 @@ class RPN(tf.keras.Model):
                 use_bias=use_bias_ConvTranspose2d))
         self.deconv3.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.deconv3.add(tf.keras.layers.ReLU())
+        # self.deconv3.add(Dropout(0.2))
 
         # ------------------------------------------------------------------------------------------------------
         # set the number of predicted classes depending on if we want an extra class for the background
@@ -678,7 +696,6 @@ class RPN(tf.keras.Model):
 
         inputs = tf.transpose(inputs,(0,2,3,1)) 
         b1 = self.block1(inputs, training=self.training) # TensorShape([1, 248, 296, 64])
-
 
         b1_up = self.deconv1(b1, training=self.training) # TensorShape([1, 248, 296, 128])
         b2 = self.block2(b1, training=self.training) # shape=(1, 124, 148, 128) 
@@ -823,7 +840,7 @@ class VoxelNet(tf.keras.Model):
                 t_rpn_avg = round(sum(self.t_rpn_list[1:])/len(self.t_rpn_list[1:]),2)
                 tf.print(f't_rpn: {t_rpn_avg}')
         if function_name == "t_nms_func":
-            t_nms_func = current_milli_time() - t_nms_func
+            t_nms_func = current_milli_time() - time
             self.t_nms_func_list.append(t_nms_func)
             if len(self.t_nms_func_list) > 1:
                 t_nms_func_avg = round(sum(self.t_nms_func_list[1:])/len(self.t_nms_func_list[1:]),2)
@@ -1189,7 +1206,8 @@ class VoxelNet(tf.keras.Model):
                 # TODO why Im doin this again? wouldnt it be better to filter as much as possible?
                 # ------------------------------------------------------------------------------------------------------
 
-                top_n_scores = np.argpartition(top_scores, -100)[-100:]
+                top_n_scores = np.argpartition(top_scores, -np.minimum(len(top_scores),100))[-np.minimum(len(top_scores),100):]
+                
                 top_scores = top_scores[[top_n_scores]]
                 box_preds = box_preds[[top_n_scores]]
                 anchors = anchors[[top_n_scores]]

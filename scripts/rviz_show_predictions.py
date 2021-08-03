@@ -290,9 +290,9 @@ def sendToRVIZ():
     rospy.init_node('talker', anonymous=True)
     #giving some time for the publisher to register
     rospy.sleep(0.1)
-    counter = 750
+    counter = 0
     counter_ini = counter
-    prediction_min_score = 0.1
+    prediction_min_score = 0.3
 
     # ------------------------------------------------------------------------------------------------------
     # set parameter
@@ -315,7 +315,7 @@ def sendToRVIZ():
         # load annos
         
         # load point clouds
-        point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/testing/velodyne_unsampled" # TESTING SAMPLED/UNSAMPLED DATA (depending on what you copy into the folder)
+        point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/testing/velodyne" # TESTING SAMPLED/UNSAMPLED DATA (depending on what you copy into the folder)
         show_annotations = False
     if mode == "testing_sampled":
         # load gt
@@ -338,9 +338,13 @@ def sendToRVIZ():
         #    thesis_eval_dict = pickle.load(file)
         # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_29/out_dir_eval_results/result_epoch_12.pkl", "rb") as file: 
         #    thesis_eval_dict = pickle.load(file)
-        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_32/out_dir_eval_results/result_epoch_34.pkl", "rb") as file: 
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_79/out_dir_eval_results/result_epoch_0.pkl", "rb") as file: 
            thesis_eval_dict = pickle.load(file)
-        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_34/out_dir_eval_results/result_epoch_11.pkl", "rb") as file: 
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_103/out_dir_eval_results/result_epoch_0.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_105/out_dir_eval_results/result_epoch_0.pkl", "rb") as file: 
+        #    thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_108/out_dir_eval_results/result_epoch_3.pkl", "rb") as file: 
            thesis_eval_dict = pickle.load(file)
         # load point clouds
         point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/testing/velodyne" # TESTING SAMPLED/UNSAMPLED DATA (depending on what you copy into the folder)
@@ -357,7 +361,7 @@ def sendToRVIZ():
         # load point clouds
         point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/training/velodyne"
         show_annotations = False
-        show_ground_truth = False
+        show_ground_truth = True
     if mode == "live":
         # load gt
         # load annos
@@ -430,6 +434,7 @@ def sendToRVIZ():
     # ------------------------------------------------------------------------------------------------------
 
     
+    print(counter)
     assert(len(velodyne_data)>0)
     while not rospy.is_shutdown() and counter < len(velodyne_data):
 
@@ -475,15 +480,23 @@ def sendToRVIZ():
             if show_ground_truth:
                 annotation_gt = kitti_infos[counter]
                 centers_gt,dims_gt,angles_gt= kitti_anno_to_corners(calib, annotation_gt["annos"])
-                centers_gt = centers_gt + [0.0,0.0,1.0]
+                # centers_gt = centers_gt * [1.0,-1.0,-1.0]
+                # print(angles_gt)
+                if len(centers_gt)>0:
+                    centers_gt = centers_gt + [0.0,0.0,dims_gt[0][2]/2]
+                
+                # if angles_gt[0] >= 0:
+                #     angles_gt = angles_gt - np.pi
+                # else:
+                #     angles_gt = angles_gt + np.pi
                 send_3d_bbox(centers_gt, dims_gt, angles_gt, bb_ground_truth_pub,header)
 
             # ------------------------------------------------------------------------------------------------------
             # Create and Publish Annos
             # ------------------------------------------------------------------------------------------------------
-
+# 247
             if show_annotations:
-                annotations = thesis_eval_dict[counter-counter_ini]
+                annotations = thesis_eval_dict[counter]
                 detection_anno = remove_low_score(annotations, prediction_min_score)
                 if len(detection_anno["score"]) > 0:
                     print(detection_anno["score"])
@@ -498,6 +511,8 @@ def sendToRVIZ():
                 print(counter)
 
             counter = counter +1
+            if counter >= len(kitti_infos)-1:
+                counter = 0
             
         except IOError as e:
             pass

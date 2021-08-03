@@ -37,6 +37,62 @@ from libraries.eval_helper_functions import send_3d_bbox
 # TargetAssigner
 ####
 
+@numba.njit
+def noise_per_box_v2_(boxes, valid_mask, loc_noises, rot_noises,
+                      global_rot_noises):
+    # boxes: [N, 5]
+    # valid_mask: [N]
+    # loc_noises: [N, M, 3]
+    # rot_noises: [N, M]
+    num_boxes = boxes.shape[0]
+    num_tests = loc_noises.shape[1]
+    box_corners = box2d_to_corner_jit(boxes)
+    current_corners = np.zeros((4, 2), dtype=boxes.dtype)
+    current_box = np.zeros((1, 5), dtype=boxes.dtype)
+    rot_mat_T = np.zeros((2, 2), dtype=boxes.dtype)
+    dst_pos = np.zeros((2, ), dtype=boxes.dtype)
+    success_mask = -np.ones((num_boxes, ), dtype=np.int64)
+    corners_norm = np.zeros((4, 2), dtype=boxes.dtype)
+    corners_norm[1, 1] = 1.0
+    corners_norm[2] = 1.0
+    corners_norm[3, 0] = 1.0
+    corners_norm -= np.array([0.5, 0.5], dtype=boxes.dtype)
+    corners_norm = corners_norm.reshape(4, 2)
+    for i in range(num_boxes):
+        if valid_mask[i]:
+            for j in range(num_tests):
+                current_box[0, :] = boxes[i]
+                current_radius = np.sqrt(boxes[i, 0]**2 + boxes[i, 1]**2)
+                current_grot = np.arctan2(boxes[i, 0], boxes[i, 1])
+                dst_grot = current_grot + global_rot_noises[i, j]
+                dst_pos[0] = current_radius * np.sin(dst_grot)
+                dst_pos[1] = current_radius * np.cos(dst_grot)
+                current_box[0, :2] = dst_pos
+                current_box[0, -1] += (dst_grot - current_grot)
+
+                rot_sin = np.sin(current_box[0, -1])
+                rot_cos = np.cos(current_box[0, -1])
+                rot_mat_T[0, 0] = rot_cos
+                rot_mat_T[0, 1] = -rot_sin
+                rot_mat_T[1, 0] = rot_sin
+                rot_mat_T[1, 1] = rot_cos
+                current_corners[:] = current_box[
+                    0, 2:4] * corners_norm @ rot_mat_T + current_box[0, :2]
+                current_corners -= current_box[0, :2]
+                _rotation_box2d_jit_(current_corners, rot_noises[i, j],
+                                     rot_mat_T)
+                current_corners += current_box[0, :2] + loc_noises[i, j, :2]
+                coll_mat = box_collision_test(
+                    current_corners.reshape(1, 4, 2), box_corners)
+                coll_mat[0, i] = False
+                if not coll_mat.any():
+                    success_mask[i] = j
+                    box_corners[i] = current_corners
+                    loc_noises[i, j, :2] += (dst_pos - boxes[i, :2])
+                    rot_noises[i, j] += (dst_grot - current_grot)
+                    break
+    return success_mask
+
 def filter_gt_box_outside_range_by_center(gt_boxes, limit_range):
     """remove gtbox outside training range.
     this function should be applied after other prep functions
@@ -1350,6 +1406,7 @@ class BatchSampler:
             loc_noises[1] = loc_noises[1] + random.uniform(noise_y[0], noise_y[1]) # y
             self._sampled_list[i]["box3d_lidar"] = self._sampled_list[i]["box3d_lidar"] + loc_noises
             #self._sampled_list[i]["box3d_lidar"] = self._sampled_list[i]["box3d_lidar"] + [1,0,1,0,0,0,0]
+            
 
 class DataBaseSamplerV2:
     def __init__(self, sampler_info_path, config):
@@ -1803,11 +1860,16 @@ def sample_all(sampler_class,
                     
                     sample_height_half = info["box3d_lidar"][5]/2.0 # get half size of sample
                     truncation_weight = (2.5-sample_distance)/2.5 # calc the intensity of truncation (truncation TRUE, if sample closer than X)
+                    truncation_shift = sample_height_half*np.random.uniform(0, 1)/2
+                    fifty_fifty = bool(random.getrandbits(1))
+                    if fifty_fifty:
+                        truncation_shift*-1
+                    
                     if(truncation_weight>0):
                         points_z_max = np.max(s_points[:,2])
                         points_z_min = np.min(s_points[:,2])
-                        points_z_max_new = points_z_max - sample_height_half*truncation_weight
-                        points_z_min_new = points_z_min + sample_height_half*truncation_weight
+                        points_z_max_new = points_z_max - sample_height_half*truncation_weight-truncation_shift
+                        points_z_min_new = points_z_min + sample_height_half*truncation_weight-truncation_shift
                         max_filter = s_points[:,2] < points_z_max_new 
                         min_filter = s_points[:,2] > points_z_min_new 
                         s_points = s_points[np.logical_and(max_filter,min_filter)]
@@ -1948,8 +2010,31 @@ class dataLoader():
             with open(self.img_list_and_infos_path, 'rb') as f:
                 self.img_list_and_infos_ori = pickle.load(f)
                 self.img_list_and_infos = self.img_list_and_infos_ori
+                
+                
+                
                 if self.training:
-                    self.img_list_and_infos = self.img_list_and_infos_ori#[750:] #LIMIT
+                    self.img_list_and_infos = [{}]
+
+                    # ------------------------------------------------------------------------------------------------------ 
+                    # limit for training
+                    # ------------------------------------------------------------------------------------------------------
+
+                    #limit
+                    for i in self.img_list_and_infos_ori[:2400]:
+                        self.img_list_and_infos.append(i)
+                    for i in self.img_list_and_infos_ori[2400:3800]:
+                        self.img_list_and_infos.append(i)
+                    self.img_list_and_infos = self.img_list_and_infos[1:]
+                    
+                    # ------------------------------------------------------------------------------------------------------ 
+                    # limit for transfer learning
+                    # ------------------------------------------------------------------------------------------------------
+                    
+                    # for i in self.img_list_and_infos_ori[3800:]:
+                    #     self.img_list_and_infos.append(i)
+                    # self.img_list_and_infos = self.img_list_and_infos[1:]
+                    
         else:
             velodyne_path = self.dataset_root_path + "/testing_live" + "/velodyne" 
             velodyne_number_images = len([name for name in os.listdir(velodyne_path)])
@@ -1989,7 +2074,7 @@ class dataLoader():
     # ==================================================
     def debug_save_points_func(self, points, message, gt_boxes=None, pillars=None):
         
-        # print("DEBUG RVIZ: "+message)
+        print("DEBUG RVIZ: "+message)
         
         self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
         
@@ -1998,7 +2083,7 @@ class dataLoader():
 
             centers = centers + [0.0,0.0,0.9]
             send_3d_bbox(centers, dims, angles, self.debug_load_data_bb, self.header) 
-        
+            # print(angles)
         if pillars is not None:
             centers,dims,angles = pillars[:, :3], pillars[:, 3:6], pillars[:, 6] # [a,b,c] -> [c,a,b] (camera to lidar coords)
 
@@ -2344,7 +2429,8 @@ class dataLoader():
             if self.debug_save_points: self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points)) # show pc in rviz 
         else:
             if self.custom_dataset:
-                velodyne_reduced_path = self.dataset_root_path + train_or_test + "/velodyne" + "/" + img_id + ".pkl" 
+                # velodyne_reduced_path = self.dataset_root_path + train_or_test + "/velodyne" + "/" + img_id + ".pkl" 
+                velodyne_reduced_path = self.dataset_root_path + "/" + img_infos["velodyne_path"]
                 with open(str(velodyne_reduced_path), 'rb') as file:
                     points = pickle.load(file, encoding='latin1')
             else:
@@ -2510,7 +2596,7 @@ class dataLoader():
         # gt_boxes = input_dict["gt_boxes"]
         # gt_boxes = box_camera_to_lidar(gt_boxes, rect, Trv2c)
         # self.debug_save_points_func(points, "input",gt_boxes)
-
+        gt_boxes = None
 
         if self.training:
 
@@ -2554,7 +2640,7 @@ class dataLoader():
 
             # debug
             
-            # if self.debug_save_points: self.debug_save_points_func(points, "input",gt_boxes)
+            #if self.debug_save_points: self.debug_save_points_func(points, "input",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # filter undesired objects
@@ -2584,6 +2670,10 @@ class dataLoader():
                     points=points,
                     random_crop=False)
             
+            # debug
+            
+            #if self.debug_save_points: self.debug_save_points_func(points, "input",gt_boxes)
+            
             # ------------------------------------------------------------------------------------------------------
             # delete the main gt box (unsampeld one) with a likelyhood
             # ------------------------------------------------------------------------------------------------------
@@ -2591,8 +2681,9 @@ class dataLoader():
             # check if a main gt box exists, first
             if len(gt_boxes)>0:
                 
-                high_likelyhood =  bool(random.getrandbits(1)) or bool(random.getrandbits(1)) or bool(random.getrandbits(1))
-                if high_likelyhood:
+                low_likelyhood = bool(random.getrandbits(1))
+                # low_likelyhood = False
+                if low_likelyhood:
                     indices = points_in_rbbox(points, gt_boxes)
                     indices_invert = ~np.array(indices).flatten()
                     points = points[indices_invert]
@@ -2846,20 +2937,7 @@ class dataLoader():
                         truncated = {"truncated":np.append(img_infos["annos"]["truncated"],self.truncated)}
                         img_infos["annos"].update(truncated)
                     
-                    # print(len(img_infos["annos"]["dimensions"]))
-                    # print(len(img_infos["annos"]["location"]))
-                    # print(len(img_infos["annos"]["rotation_y"]))
-                    # print(len(img_infos["annos"]["alpha"]))
-                    # print(len(img_infos["annos"]["bbox"]))
-                    # print(len(img_infos["annos"]["difficulty"]))
-                    # print(len(img_infos["annos"]["group_ids"]))
-                    # print(len(img_infos["annos"]["index"]))
-                    # print(len(img_infos["annos"]["name"]))
-                    # print(len(img_infos["annos"]["num_points_in_gt"]))
-                    # print(len(img_infos["annos"]["occluded"]))
-                    # print(len(img_infos["annos"]["score"]))
-                    # print(len(img_infos["annos"]["truncated"]))
-                    # print("DONE")
+
             
     
         # ------------------------------------------------------------------------------------------------------ 

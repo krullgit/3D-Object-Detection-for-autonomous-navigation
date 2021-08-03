@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding: latin-1
 
+import keyboard  # using module keyboard
+import sys
+print(sys.path)
+sys.path += ['/opt/ros/melodic/lib/python2.7/dist-packages']
 
 import rospy
 from std_msgs.msg import String
@@ -18,10 +22,15 @@ from jsk_recognition_msgs.msg import BoundingBox
 from scipy.spatial.transform import Rotation as R
 import ctypes
 
+
+
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
 import ros_numpy
+
+
+
 
 
 ##### 3DOD
@@ -202,7 +211,7 @@ def pc2_to_xyzrgb(point):
 # =========================================
 class listener(): 
 
-    def __init__(self, dataset_root_path, bb_rotation, start_idx, end_idx, train_or_test, empty_annos, save_every_x_step):
+    def __init__(self, dataset_root_path, start_idx, end_idx, train_or_test, save_every_x_step, empty_annos=None, bb_rotation=None):
 
         # ------------------------------------------------------------------------------------------------------
         # set variables
@@ -356,7 +365,7 @@ class listener():
         # if self.image_counter <= self.start_idx:
         #     return None
 
-        if self.image_counter % save_every_x_step == 0:
+        if self.image_counter % self.save_every_x_step == 0:
             
             # ------------------------------------------------------------------------------------------------------
             # print how many point clouds we have saved already
@@ -421,8 +430,8 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
                 filepath_calibration = self.dataset_root_path + "training/" + "calib/" + str(image_counter_leading_zeros) + ".txt"
             elif self.mode == "test":
                 filepath_calibration = self.dataset_root_path + "testing/" + "calib/" + str(image_counter_leading_zeros) + ".txt"
-            with open(filepath_calibration, 'w') as file:
-                file.write(calib)
+            # with open(filepath_calibration, 'w') as file:
+            #     file.write(calib)
             
             # ------------------------------------------------------------------------------------------------------
             # Save Annotations
@@ -444,9 +453,12 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
                 filepath_annoation = self.dataset_root_path + "training/" + "label_2/" + str(image_counter_leading_zeros) + ".txt"
             elif self.mode == "test":
                 filepath_annoation = self.dataset_root_path + "testing/" + "label_2/" + str(image_counter_leading_zeros) + ".txt"
+                
+          
+                
             if self.empty_annos == False:
-                with open(filepath_annoation, 'w') as file:
-                    file.write(annoations)
+                # with open(filepath_annoation, 'w') as file:
+                #     file.write(annoations)
                     
                 
                 # ------------------------------------------------------------------------------------------------------
@@ -461,7 +473,79 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
                     file.write("")
                     
                     
+     # this listener saves point clouds with calib and annotations
+    # =========================================
+    def callback_real_annotation_record(self, data):
+
+        print("Current ID: {}".format(str(self.image_counter)))
+         # increase image_counter
+        self.image_counter += 1
+
+        # ------------------------------------------------------------------------------------------------------
+        # if we reached the number of point clouds we wanted to save: exit
+        # ------------------------------------------------------------------------------------------------------
+
+        # if self.start_idx > self.end_idx:
+        #     import sys
+        #     print("DONE")
+        #     sys.exit()
+
+        # ------------------------------------------------------------------------------------------------------
+        # if we did not reach the image ID when we want to start saving: skip
+        # ------------------------------------------------------------------------------------------------------
+
+        # if self.image_counter <= self.start_idx:
+        #     return None
+
+        if self.image_counter % self.save_every_x_step == 0:
             
+            # ------------------------------------------------------------------------------------------------------
+            # print how many point clouds we have saved already
+            # ------------------------------------------------------------------------------------------------------
+
+
+            print("Current ID Naming: {}".format(str(self.start_idx)))
+
+            # ------------------------------------------------------------------------------------------------------
+            # convert pountcloud format form sensor to array
+            # ------------------------------------------------------------------------------------------------------
+
+            #pc = np.array([pc2_to_xyzrgb(pp) for pp in pc2.read_points(data, skip_nans=True, field_names=("x", "y", "z","rgb"))])
+            pc = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(data)
+
+            # ------------------------------------------------------------------------------------------------------
+            #take every 4 points to reduce data
+            # ------------------------------------------------------------------------------------------------------
+
+            #pc = pc[1::4]
+            pc = pc[1::4] # the rosbag has more points for some reason
+
+            # ------------------------------------------------------------------------------------------------------
+            # Rotate to get to Kitti coords
+            # ------------------------------------------------------------------------------------------------------
+
+            r = R.from_euler('y', -90, degrees=True).as_dcm()
+            r2 = R.from_euler('x', 90, degrees=True).as_dcm()
+            pc = np.dot(pc,r)
+            pc = np.dot(pc,r2)
+
+            # ------------------------------------------------------------------------------------------------------
+            # save point cloud
+            # ------------------------------------------------------------------------------------------------------
+
+            # we create leading zeros of the index to match the filenames of the dataset
+            image_counter_leading_zeros = "%06d" % (int(self.start_idx),) 
+            self.start_idx += 1
+            if self.mode == "train":
+                filepath_pc = self.dataset_root_path + "training/" + "velodyne/" + str(image_counter_leading_zeros) + ".pkl"
+            elif self.mode == "test":
+                filepath_pc = self.dataset_root_path + "testing_real_anno/" + "velodyne/" + str(image_counter_leading_zeros) + ".pkl"
+            # lift z axis to match the ground at 0 (realsense sensor was 1 meter above the ground while recording, so ground is at -1)
+            pc = np.array(pc) + [0.0,0.0,1.0]
+            with open(filepath_pc, 'wb') as file:
+                pickle.dump(np.array(pc), file, 2)
+
+    
 
     # Just helper function to run this class
     # has a countdown and sets up the ros subscriber
@@ -512,12 +596,222 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
                     print("DONE")
                     sys.exit()
         
+        # listener with annotations
+        if live_mode == "real_annotation_record":
+            #self.subscriber = rospy.Subscriber("/camera/depth/color/points", msg_PointCloud2, self.callback) # source: realsense directly
+            self.subscriber = rospy.Subscriber("/camera/depth/color/points", msg_PointCloud2, self.callback_real_annotation_record) # source: to capture from depth_image_proc/point_cloud_xyz package
 
+            # spin() simply keeps python from exiting until this node is stopped
+            # rospy.spin()
+            
+            # we check regularly if we have enough images (end_idx) and than unregister the subscriber and save the points
+            while True:
+                time.sleep(0.1)
+                if self.start_idx > self.end_idx:
+                    self.subscriber.unregister()
+                    print("DONE")
+                    sys.exit()
+        
+     
+        
+# this listener saves point clouds with calib and annotations
+# =========================================
+def callback_real_annotation_anno(dataset_root_path, train_or_test):
+    
+    point_cloud_pub = rospy.Publisher('/debug_points', PointCloud2)
+    bb_pub = rospy.Publisher("/debug_load_data_bb", BoundingBoxArray)
+    rospy.init_node('talker', anonymous=True)
+    #giving some time for the publisher to register
+    rospy.sleep(0.1)
+    
+    # ------------------------------------------------------------------------------------------------------
+    # load pointclouds from folder and order numerically
+    # ------------------------------------------------------------------------------------------------------
+
+    import os
+    
+    if train_or_test == "train":
+        filepath_pc = dataset_root_path + "training/" + "velodyne/"
+    elif train_or_test == "test":
+        filepath_pc = dataset_root_path + "testing/" + "velodyne/"
+    
+    
+    
+    velodyne_data = []
+    names_indices = []
+    for root, dirs, files in os.walk(filepath_pc, topdown=False):
+        files = [x[:-4] for x in files] # cut the .png
+        for name in sorted(files): # order the list // !!!!! every 10s elements is out of order since 
+            names_indices.append(name)
+            name = name + ".pkl" # append .png again
+            file = os.path.join(root, name)
+            with open(file, 'rb') as file:
+                velodyne_data.append(pickle.load(file, encoding="latin1"))
+        
+    
+    # filling pointcloud header
+    header = std_msgs.msg.Header()
+    header.stamp = rospy.Time.now()
+    header.frame_id = 'camera_color_frame'
+    fields = [PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1),
+            ]
+    
+    assert(len(velodyne_data)>0)
+    counter = 0
+    
+    # ------------------------------------------------------------------------------------------------------
+    # save Calibration
+    # ------------------------------------------------------------------------------------------------------
+
+    # everything but R0_rect and Tr_velo_to_cam are palceholder
+    # the placeholder are needed that the data work within the pipeline made for kitti data orginally
+    calib = """P0: 7.070493000000e+02 0.000000000000e+00 6.040814000000e+02 0.000000000000e+00 0.000000000000e+00 7.070493000000e+02 1.805066000000e+02 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00 1.000000000000e+00 0.000000000000e+00
+P1: 7.070493000000e+02 0.000000000000e+00 6.040814000000e+02 -3.797842000000e+02 0.000000000000e+00 7.070493000000e+02 1.805066000000e+02 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00 1.000000000000e+00 0.000000000000e+00
+P2: 7.070493000000e+02 0.000000000000e+00 6.040814000000e+02 4.575831000000e+01 0.000000000000e+00 7.070493000000e+02 1.805066000000e+02 -3.454157000000e-01 0.000000000000e+00 0.000000000000e+00 1.000000000000e+00 4.981016000000e-03
+P3: 7.070493000000e+02 0.000000000000e+00 6.040814000000e+02 -3.341081000000e+02 0.000000000000e+00 7.070493000000e+02 1.805066000000e+02 2.330660000000e+00 0.000000000000e+00 0.000000000000e+00 1.000000000000e+00 3.201153000000e-03
+R0_rect: 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0
+Tr_velo_to_cam: 0.0 -1.0 0.0 0.0 0.0 0.0 -1.0 0.0 1.0 0.0 0.0 0.0
+Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086759000000e-01 -7.854027000000e-04 9.998898000000e-01 -1.482298000000e-02 3.195559000000e-01 2.024406000000e-03 1.482454000000e-02 9.998881000000e-01 -7.997231000000e-01"""
+
+    # ------------------------------------------------------------------------------------------------------
+    # Save Annotations
+    # ------------------------------------------------------------------------------------------------------
+    
+    name = "Pedestrian"
+    truncated = [0.0]
+    occluded = [0]
+    alpha = [0.0]
+    bbox = np.array([700.0, 100.00, 800.00, 300.00]) # just set that the height is > 100 because this effect the difficulty assessment in "create data"
+    dimensions = np.array([1.8,0.4,0.6]) # height,width,length (kitti format)
+    #location = [2.0,0.0,-0.1] lidar coords: 
+    #location = [-0.1,0.0,2.0] # image coords: we need to store in kitti image coords 
+    location = np.array([-0.68,0.247,3.37]) # image coords: we need to store in kitti image coords z(-x)(-y)
+    angle = np.array([-2.1])
+
+
+    def save_anno(empty=False):
+        with open(filepath_calibration, 'w') as file:
+            file.write(calib)
+        annoations = [str(truncated[0]),
+                      str(occluded[0]),
+                      str(alpha[0]),
+                      np.array2string(bbox, separator=' ',)[1:-1],
+                      np.array2string(dimensions, separator=' ',)[1:-1],
+                      np.array2string(location*[-1.0,-1.0,1.0], separator=' ',)[1:-2],
+                      np.array2string(angle, separator=' ',)[1:-1]
+                      ]
+        # 'Pedestrian 0.0 0 0.0 700. 100. 800. 300. 1.8 0.4 0.6 -0.68   0.247  3.37  1.'
+
+        annoations = name + " " + ' '.join(e for e in annoations).replace("  ", " ").replace("  ", " ").replace("  ", " ")
+        if empty == True:
+            annoations = ""
+        with open(filepath_annoation, 'w') as file:
+                    file.write(annoations)
+    
+    print(counter)
+    while not rospy.is_shutdown() and counter < len(velodyne_data):
+        time.sleep(0.3)
+        print(counter)
+        
+        
+        point_cloud = velodyne_data[counter]
+        if train_or_test == "train":
+            filepath_calibration = dataset_root_path + "training/" + "calib/" + str(names_indices[counter]) + ".txt"
+            filepath_annoation = dataset_root_path + "training/" + "label_2/" + str(names_indices[counter]) + ".txt"
+        elif train_or_test == "test":
+            filepath_calibration = dataset_root_path + "testing/" + "calib/" + str(names_indices[counter]) + ".txt"
+            filepath_annoation = dataset_root_path + "testing/" + "label_2/" + str(names_indices[counter]) + ".txt"
+
+        
+        
+        # ------------------------------------------------------------------------------------------------------
+        # Create and Publish Point Cloud
+        # ------------------------------------------------------------------------------------------------------
+        
+        # https://gist.github.com/lucasw/ea04dcd65bc944daea07612314d114bb
+        pc2 = point_cloud2.create_cloud(header, fields, point_cloud)
+        point_cloud_pub.publish(pc2)
+        counter += 1
+        
+    
+       
+        send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+        while True:
+            
+            if keyboard.is_pressed("w"):
+                location += [0.0,0.0,0.0001]
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("s"):
+                location -= [0.0,0.0,0.0001]
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("a"):
+                location += [0.0001,0.00,0.0]
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("d"):
+                location -= [0.0001,0.00,0.0] 
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("q"):
+                if(angle[0]>-math.pi):
+                    angle -= [0.0001]
+                else:
+                    angle = np.array([math.pi])- [0.0001]
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("e"):
+                if(angle[0]<+math.pi):
+                    angle += [0.0001]
+                else:
+                    angle = np.array(-math.pi)+ [0.0001]
+                
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("up"):
+                location += [0.0,0.0001,0.0] 
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("down"):
+                location -= [0.0,0.0001,0.0] 
+                send_3d_bbox_anno(bb_pub, location[[2,0,1]]+[0,0,dimensions[0]/2],dimensions[[1,2,0]],angle[0], header)
+                continue
+            if keyboard.is_pressed("enter"):
+                save_anno()
+                break
+            if keyboard.is_pressed("z"):
+                counter -= 2
+                print("back")
+                break
+            if keyboard.is_pressed("h"):
+                print("skip 1")
+                break
+            if keyboard.is_pressed("m"):
+                print("save empty")
+                save_anno(empty=True)
+                break
+            # if keyboard.is_pressed("j"):
+            #     counter += 10
+            #     print("skip 10")
+            #     break
+            
+            
+           
+            # save_anno()
+
+        
+        
+        
         
 if __name__ == '__main__':
     
     # python scripts/realsense_make_dataset.py live_mode_off /home/makr/Documents/data/pedestrian_3d_own/1/object/ -3.14 0 150 test True 750
-
+    empty_annos=None,
+    bb_rotation=0.0
+                            
     try:
         live_mode = sys.argv[1]
         if live_mode == "live_mode_on":
@@ -537,13 +831,28 @@ if __name__ == '__main__':
             train_or_test = sys.argv[6]
             empty_annos = bool(sys.argv[7])
             save_every_x_step = int(sys.argv[8])
+        if live_mode == "real_annotation_record":
+            dataset_root_path = sys.argv[2]
+            start_idx = int(sys.argv[3])
+            end_idx = int(sys.argv[4])
+            train_or_test = sys.argv[5]
+            save_every_x_step = int(sys.argv[6])
+        if live_mode == "real_annotation_annotate":
+            dataset_root_path = sys.argv[2]
+            start_idx = int(sys.argv[3])
+            end_idx = int(sys.argv[4])
+            train_or_test = sys.argv[5]
+            callback_real_annotation_anno(dataset_root_path,train_or_test)
+            sys.exit()
+            
         listener = listener(dataset_root_path=dataset_root_path, 
-                            bb_rotation=bb_rotation, 
                             start_idx=start_idx, 
                             end_idx=end_idx,
                             train_or_test=train_or_test,
+                            save_every_x_step=save_every_x_step,
                             empty_annos=empty_annos,
-                            save_every_x_step=save_every_x_step)
+                            bb_rotation=bb_rotation
+                            )
         listener.run(live_mode=live_mode)
    
     except rospy.ROSInterruptException:

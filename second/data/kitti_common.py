@@ -192,10 +192,10 @@ def get_kitti_image_info(path,
             annotations = get_label_anno(label_path)
         
         
-        # get calibrations
-        if idx > 2399:
-            print(idx)
-            pass
+        # # get calibrations
+        # if idx > 2399:
+        #     print(idx)
+        #     pass
 
         if calib:
 
@@ -263,6 +263,7 @@ def get_kitti_image_info(path,
 
     # debug
     # for i in image_ids:
+    #     print(i)
     #     map_func(i)
 
     # map image_ids multi threaded
@@ -642,6 +643,7 @@ def get_label_anno(label_path):
     })
     with open(label_path, 'r') as f:
         lines = f.readlines()
+ 
     # if len(lines) == 0 or len(lines[0]) < 15:
     #     content = []
     # else:

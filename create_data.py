@@ -156,7 +156,7 @@ def create_kitti_info_file(data_path,
                            relative_path=True):
 
     
-    train_img_ids = list(range(0,3841)) # indices of training images that will appear in the info file
+    train_img_ids = list(range(0,4340)) # indices of training images that will appear in the info file
     val_img_ids = list(range(0,1200)) # indices of test images that will appear in the info file
     # trainval_img_ids = list(range(0,7480)) # only kitti
     # test_img_ids = list(range(0,7517)) # only kitti
@@ -166,46 +166,75 @@ def create_kitti_info_file(data_path,
         save_path = pathlib.Path(data_path)
     else:
         save_path = pathlib.Path(save_path)
+        
+    mode = "test" # option: train, test, test_real
 
+    # ------------------------------------------------------------------------------------------------------ 
+    #  Train
+    # ------------------------------------------------------------------------------------------------------
     
-    # get all the annos from the file
-    kitti_infos_train = kitti.get_kitti_image_info(
-        data_path,
-        training=True,
-        velodyne=True,
-        calib=True,
-        image_ids=train_img_ids,
-        relative_path=relative_path)
+    if mode == "train":
+        # get all the annos from the file
+        kitti_infos_train = kitti.get_kitti_image_info(
+            data_path,
+            training=True,
+            velodyne=True,
+            calib=True,
+            image_ids=train_img_ids,
+            relative_path=relative_path)
 
 
-    # calculate the number of points in the pointcloud which fall into each gt box
-    _calculate_num_points_in_gt(data_path, kitti_infos_train, relative_path)
+        # calculate the number of points in the pointcloud which fall into each gt box
+        _calculate_num_points_in_gt(data_path, kitti_infos_train, relative_path)
+    
 
-
+        filename = save_path / 'kitti_infos_train.pkl'
+        print(f"Kitti info train file is saved to {filename}")
+        with open(filename, 'wb') as f:
+            pickle.dump(kitti_infos_train, f,2)
+        
     # ------------------------------------------------------------------------------------------------------ 
-    #  save pc infos
+    #  test fake anno
+    # ------------------------------------------------------------------------------------------------------
+
+    if mode == "test":
+        val_img_ids = list(range(0,120)) # indices of test images that will appear in the info file
+        kitti_infos_val = kitti.get_kitti_image_info(
+            data_path,
+            training=False,
+            velodyne=True,
+            calib=True,
+            image_ids=val_img_ids,
+            relative_path=relative_path)
+        _calculate_num_points_in_gt(data_path, kitti_infos_val, relative_path)
+        filename = save_path / 'kitti_infos_val.pkl'
+        print(f"Kitti info val file is saved to {filename}")
+        with open(filename, 'wb') as f:
+            pickle.dump(kitti_infos_val, f,2)
+        
+        
     # ------------------------------------------------------------------------------------------------------ 
-
-    filename = save_path / 'kitti_infos_train.pkl'
-    print(f"Kitti info train file is saved to {filename}")
-    with open(filename, 'wb') as f:
-        pickle.dump(kitti_infos_train, f,2)
-
-
-    # do the same for training set
-    kitti_infos_val = kitti.get_kitti_image_info(
-        data_path,
-        training=False,
-        velodyne=True,
-        calib=True,
-        image_ids=val_img_ids,
-        relative_path=relative_path)
-    _calculate_num_points_in_gt(data_path, kitti_infos_val, relative_path)
-    filename = save_path / 'kitti_infos_val.pkl'
-    print(f"Kitti info val file is saved to {filename}")
-    with open(filename, 'wb') as f:
-        pickle.dump(kitti_infos_val, f,2)
-
+    #  test real anno
+    # ------------------------------------------------------------------------------------------------------
+    
+    if mode == "test_real":
+        val_img_ids = list(range(0,120)) # indices of test images that will appear in the info file
+        
+        kitti_infos_val = kitti.get_kitti_image_info(
+            data_path,
+            training=False,
+            velodyne=True,
+            calib=True,
+            image_ids=val_img_ids,
+            relative_path=relative_path)
+        _calculate_num_points_in_gt(data_path, kitti_infos_val, relative_path)
+        filename = save_path / 'kitti_infos_val.pkl'
+        print(f"Kitti info val file is saved to {filename}")
+        with open(filename, 'wb') as f:
+            pickle.dump(kitti_infos_val, f,2)
+    
+    
+    
     # ------------------------------------------------------------------------------------------------------
     # old KITTI stuff
     # ------------------------------------------------------------------------------------------------------

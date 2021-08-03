@@ -13,13 +13,13 @@ do_evaluate: True # If True, we will do an evaluation after each epoch during tr
 # eval general params
 measure_time: False
 measure_time_extended: False
-eval_model_id: "6" #"531" #"496" #  whats the name of the folder of the trained model
-eval_checkpoint: "/model_weights_58.h5" #"/model_weights_46.h5" # Option: [model_weights_temp, model_weights_0] # which checkpoint of the model we want to use. The number in "model_weights_0" defines the epoch 
+eval_model_id: "103" #"531" #"496" #  whats the name of the folder of the trained model
+eval_checkpoint: "/model_weights_0.h5" #"/model_weights_46.h5" # Option: [model_weights_temp, model_weights_0] # which checkpoint of the model we want to use. The number in "model_weights_0" defines the epoch 
 # "no_annos_mode" in "eval_input_reader" must also be set
 
 # eval production_mode params
 production_mode: False # If true  we take new pointclouds from a realsense live stream
-prediction_min_score: 0.5 # this is only used in production_mode = True # removes prediction scores lower than x
+prediction_min_score: 0.3 # this is only used in production_mode = True # removes prediction scores lower than x
 
 # input_reader general
 cache : False  # do we have a buffer/cache (where is the difference?) // seems to overfloat the memory, so better set to False always 
@@ -37,7 +37,7 @@ train_input_reader:
   # sampler
   sampler_info_path : "/home/makr/Documents/data/pedestrian_3d_own/1/object/kitti_dbinfos_train.pkl"
   sample_classes: ["Pedestrian"] # objects we want to randomly place inside the pointcloud 
-  sample_max_nums: [8] # number of objects we want to randomly place inside the pointcloud 
+  sample_max_nums: [8] # [8], [0] for transferLEARNING # number of objects we want to randomly place inside the pointcloud 
   sampler_max_point_collision: 500 # maximum number of points in the point cloud the sampled object can overlap (take the same 3D space)
   sampler_min_point_collision: 1 # minumum number of points in the point cloud the sampled object must overlap (take the same 3D space)
   sampler_noise_x_closer: [-0.8,+0.2] # x cood # in which interval the samples are randomly translated that are more than sampler_noise_x_point away
@@ -52,8 +52,8 @@ train_input_reader:
   batch_size : 2 # the batch size for training 
 
   # parameter for augmentation
-  groundtruth_rotation_uniform_noise : [-0.15707963267, 0.15707963267] # per object
-  groundtruth_localization_noise_std: [0.15, 0.15, 0.15] # per object
+  groundtruth_rotation_uniform_noise : [-0.39269908169, 0.39269908169] # [-0.39269908169, 0.39269908169], [-0.0, 0.0] for transferLEARNING # per object 
+  groundtruth_localization_noise_std: [0.15, 0.15, 0.05] # [0.15, 0.15, 0.05], [0.0, 0.0, 0.0] for transferLEARNING# per object
   global_random_rotation_range_per_object: [0, 0] # whole pointcloud
   global_rotation_uniform_noise: [-0.178539816, 0.178539816] # whole pointcloud
   global_scaling_uniform_noise: [0.95, 1.05] # whole pointcloud
@@ -95,10 +95,12 @@ model:
       # voxel_size : [0.08, 0.08, 4.0] # This is the size of the voxels beeing created # Z must be the same as the Z range in point_cloud_range # If Z too small points in height will be truncated
       voxel_size : [0.08, 0.08, 4.0] # This is the size of the voxels beeing created # Z must be the same as the Z range in point_cloud_range # If Z too small points in height will be truncated
       max_number_of_points_per_voxel : 200 # max number of poits per voxel, they will be randomly sampled if to many
+      # max_number_of_points_per_voxel : 200 # max number of poits per voxel, they will be randomly sampled if to many
       max_number_of_voxels: 12000 # max number of voxels
     num_class: 1 # how many desired_objects we have 
     voxel_feature_extractor: # params for the PillarFeatureNet
       module_class_name: "PillarFeatureNet"
+      # num_filters: 256 #128 # 64 # output of the linear layer which encodes 8 features (without reflectance) to num_filters filters
       num_filters: 128 #128 # 64 # output of the linear layer which encodes 8 features (without reflectance) to num_filters filters
       with_distance: false # not used
 
@@ -108,8 +110,10 @@ model:
       layer_nums: [3, 5, 5] # defines the amount of layers per Block
       layer_strides: [1, 2, 2] # defines the strides per Block
       num_filters: [64, 128, 256] # defines num_filters per Block
+      # num_filters: [32, 64, 128] # defines num_filters per Block
       upsample_strides: [1, 2, 4] # defines upsample_strides per Block # the last number needs to consider that the feature map was downsampled 2 times (e.g. if it was downsa. first time by 2 and the second time by 2, it needs to be upsa. by 4)
       num_upsample_filters: [128, 128, 128] # defines num_upsample_filters per Block
+      # num_upsample_filters: [64, 64, 64] # defines num_upsample_filters per Block
       use_groupnorm: false
       num_groups: 32 #not used
 
@@ -166,14 +170,26 @@ model:
         
 # Optimizer 
 train_config: 
-  optimizer: 
+  optimizer:  
     adam_optimizer: 
       learning_rate: 
         exponential_decay_learning_rate: 
-          initial_learning_rate: 0.002 # learning rate we start with
+          initial_learning_rate: 0.002 #0.002, 0.0002 for transferLEARNING # learning rate we start with
           decay_steps: 7000 # 4800 for batch size 2 and 2400 samples #27840 # 1856 steps per epoch * 15 epochs # TODO umrechnen auf batch_size 1
           decay_factor: 0.8
           staircase: False # if false, there will be   a smooth transition from one learning rate to the next learning rate
       weight_decay: 0.0001
   net_metrics_steps: 500 # after how many steps (batch iteration) the metrics eval must be shown
   
+for transfer learning:
+# search here for "transferLEARNING" and replace as suggest
+# here, set load_weights: True
+# in train.pl replace models for loading 
+# replace test dataset with real annotated test dataset
+# in load_data.py uncomment # limit for transfer learning and comment # limit for training
+# in load_data.py change low_likelyhood = bool(random.getrandbits(1)) to low_likelyhood = False
+
+# model 79:
+# t_full_sample: 12.38, t_preprocess: 0.37, t_network: 8.01, t_predict: 3.79, t_anno: 0.5, t_rviz: 0.0
+
+# model 96:

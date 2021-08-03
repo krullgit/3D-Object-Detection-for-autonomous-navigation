@@ -301,6 +301,8 @@ class PointPillarsScatter(tf.keras.Model):
             this_coords = tf.boolean_mask(coords,batch_mask)
             indices = this_coords[:, 2] * self.nx + this_coords[:, 3]
             indices = tf.cast(indices, tf.int64)
+            #Shapes (128,) and (1,) are incompatible
+
             voxels = tf.boolean_mask(voxel_features,batch_mask)
             voxels = tf.transpose(voxels, perm=[1, 0])  
 

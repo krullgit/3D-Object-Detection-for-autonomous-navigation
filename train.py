@@ -59,8 +59,49 @@ from jsk_recognition_msgs.msg import BoundingBoxArray
 from jsk_recognition_msgs.msg import BoundingBox
 from scipy.spatial.transform import Rotation as R
 
-
-
+def set_trainable(net, trainable):
+    
+    # PillarFeatureNet
+    net.layers[1].layers[0].layers[0].trainable = trainable
+    net.layers[1].layers[0].layers[1].trainable = trainable
+    net.layers[1].layers[0].layers[2].trainable = trainable
+    # PointPillarsScatter
+    
+    # RPN
+    net.layers[3].layers[0].layers[0].trainable = trainable
+    net.layers[3].layers[0].layers[1].trainable = trainable
+    net.layers[3].layers[0].layers[2].trainable = trainable
+    net.layers[3].layers[0].layers[3].trainable = trainable
+    net.layers[3].layers[0].layers[4].trainable = trainable
+    net.layers[3].layers[0].layers[5].trainable = trainable
+    net.layers[3].layers[0].layers[6].trainable = trainable
+    net.layers[3].layers[0].layers[7].trainable = trainable
+    net.layers[3].layers[0].layers[8].trainable = trainable
+    net.layers[3].layers[0].layers[9].trainable = trainable
+    
+    net.layers[3].layers[2].layers[0].trainable = trainable
+    net.layers[3].layers[2].layers[1].trainable = trainable
+    net.layers[3].layers[2].layers[2].trainable = trainable
+    net.layers[3].layers[2].layers[3].trainable = trainable
+    net.layers[3].layers[2].layers[4].trainable = trainable
+    net.layers[3].layers[2].layers[5].trainable = trainable
+    net.layers[3].layers[2].layers[6].trainable = trainable
+    net.layers[3].layers[2].layers[7].trainable = trainable
+    net.layers[3].layers[2].layers[8].trainable = trainable
+    net.layers[3].layers[2].layers[9].trainable = trainable
+    
+    net.layers[3].layers[4].layers[0].trainable = trainable
+    net.layers[3].layers[4].layers[1].trainable = trainable
+    net.layers[3].layers[4].layers[2].trainable = trainable
+    net.layers[3].layers[4].layers[3].trainable = trainable
+    net.layers[3].layers[4].layers[4].trainable = trainable
+    net.layers[3].layers[4].layers[5].trainable = trainable
+    net.layers[3].layers[4].layers[6].trainable = trainable
+    net.layers[3].layers[4].layers[7].trainable = trainable
+    net.layers[3].layers[4].layers[8].trainable = trainable
+    net.layers[3].layers[4].layers[9].trainable = trainable
+    
+    return net
 
 
 #  ████████╗    ██████╗      █████╗     ██╗    ███╗   ██╗    
@@ -159,7 +200,13 @@ def train(config_path):
     # ------------------------------------------------------------------------------------------------------ 
     
     net = VoxelNet(config, writer)
+
+
+
     
+    
+    
+        
     # ------------------------------------------------------------------------------------------------------
     #  Create Optimizer
     # ------------------------------------------------------------------------------------------------------ 
@@ -193,6 +240,7 @@ def train(config_path):
     if from_file_mode:
         with open("test_batch_in_file", "rb") as file:
             data_iterator = pickle.load(file)
+            
     
     # ------------------------------------------------------------------------------------------------------
     #  We wrap a training step in a tf.function to to gain speedups (5x)
@@ -296,11 +344,13 @@ def train(config_path):
                 load_weights_finished = True
                 
                 # load weights
-                net.load_weights("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_488/out_dir_checkpoints/model_weights_40.h5")
+                net.load_weights("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_102/out_dir_checkpoints/model_weights_21.h5")
 
                 # load optimizer
-                with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_488/out_dir_checkpoints/optimizer_weights_40.h5", "rb") as file: optimizer.set_weights(pickle.load(file))
+                with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_102/out_dir_checkpoints/optimizer_weights_21.h5", "rb") as file: optimizer.set_weights(pickle.load(file))
 
+                # freeze layer for transfer learning
+                set_trainable(net, False)
             # ------------------------------------------------------------------------------------------------------
             #  Run Model and create Loss
             # ------------------------------------------------------------------------------------------------------
@@ -337,7 +387,9 @@ def train(config_path):
         if do_evaluate:
 
             # save weights temporarily to check first the eval
+            if load_weights: set_trainable(net, True)
             net.save_weights(out_dir_checkpoints+"/model_weights_temp.h5")
+            if load_weights: set_trainable(net, False)
 
             # eval weights
             mAP3d, result, mAPbev, mAPaos = evaluate(config_path, model_id, epoch_idx=str(epoch_idx))
@@ -364,7 +416,9 @@ def train(config_path):
                 print("* Save Model Weights and Optimizer weights")
                 print("**********************************************")
 
+                if load_weights: set_trainable(net, True)
                 net.save_weights(out_dir_checkpoints+"/model_weights_{}.h5".format(str(epoch_idx)))
+                if load_weights: set_trainable(net, False)
 
                 # update best eval score
                 best_eval_score = eval_score
@@ -377,13 +431,14 @@ def train(config_path):
         # DEBUG: always save weights, no matter if good or not
         # ------------------------------------------------------------------------------------------------------
         
+        if load_weights: set_trainable(net, True)
         # save Optimizer weights TODO
         with open(out_dir_checkpoints+"/optimizer_weights_{}.h5".format(str(epoch_idx)), "wb") as file: 
             pickle.dump(optimizer.get_weights(), file)
             
         # just save the last model indepeneding of its performance out of curiosity
         net.save_weights(out_dir_checkpoints+"/model_weights_{}.h5".format(str(epoch_idx)))
-    
+        if load_weights: set_trainable(net, False)
 
 
 
@@ -594,15 +649,19 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     #  Load dataloader parameter and create dataloader
     # ------------------------------------------------------------------------------------------------------ 
 
-    limit_begin = 750 # Options: {Int} # begin idx, to limit the amount of test data to be evaluated 
+    production_mode = bool(config["production_mode"])
+    limit_begin = 0 # Options: {Int} # begin idx, to limit the amount of test data to be evaluated 
     limit =None # Options: {None,Int} # end idx
+    if production_mode:
+        limit_begin = 0 # Options: {Int} # begin idx, to limit the amount of test data to be evaluated 
+        limit =None # Options: {None,Int} # end idx
     batch_size = config["eval_input_reader"]["batch_size"] 
     num_point_features = config["train_input_reader"]["num_point_features"]
     center_limit_range = config["model"]["second"]["post_center_limit_range"]
     desired_objects = config["eval_input_reader"]["desired_objects"]
     no_annos_mode = config["eval_input_reader"]["no_annos_mode"]
-    production_mode = bool(config["production_mode"])
     prediction_min_score = config["prediction_min_score"]
+    load_weights = config["load_weights"]
 
 
     # create the dataLoader object which is reponsible for loading datapoints
@@ -689,6 +748,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     t_network_list = []
     t_predict_list = []
     t_anno_list = []
+    t_anno_list = []
     t_rviz_list = []
 
 
@@ -712,7 +772,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     for i, example in enumerate(data_iterator): 
         
         # debug limit eval data
-        if i >= limit_begin:
+        if i >= limit_begin and example[0].shape[0]>1:
             
             # debug measure time
             if measure_time: 
@@ -747,13 +807,14 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
                 # load the weights depending on if we are in training mode since
                 # if yes the "model_weights_temp" file needs to be evaluated 
                 model_dir = ""
+                if load_weights: set_trainable(net, True)
                 if model_id_memory == None: # for explaination, see variable "model_id_memory"
                     model_dir = out_dir_checkpoints + eval_checkpoint  # for eval mode
                     net.load_weights(model_dir)
                 else:
                     model_dir = out_dir_checkpoints + "/model_weights_temp.h5" # for training mode
                     net.load_weights(model_dir)
-
+                if load_weights: set_trainable(net, False)
                 print("**********************************************")
                 print("* Model Loaded from Path: {}".format(model_dir))
                 print("**********************************************")
@@ -821,12 +882,13 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
                 boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1)
                 boxes_lidar = box_camera_to_lidar(boxes_camera, calib['R0_rect'],calib['Tr_velo_to_cam'])
                 centers,dims,angles = boxes_lidar[:, :3], boxes_lidar[:, 3:6], boxes_lidar[:, 6] # [a,b,c] -> [c,a,b] (camera to lidar coords)
-                
+                if len(dt_anno["score"])>0:
+                    print(dt_anno["score"])
                 # LIFT bounding boxes 
                 # - the postition of bboxes in the pipeline is at the z buttom of the bb and ros needs it at the z center
                 # - TODO: lift by height/2 and not just 1.0
 
-                centers = centers + [0.0,0.0,1.0]
+                # centers = centers + [0.0,0.0,1.0]
                 send_3d_bbox(centers, dims, angles, bb_pred_guess_1_pub, header) 
             
             # ------------------------------------------------------------------------------------------------------
@@ -918,6 +980,13 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     # ------------------------------------------------------------------------------------------------------
     # return results (only used during training)
     # ------------------------------------------------------------------------------------------------------
+    
+    # get avg score
+    eval_score = (mAP3d[0][0].sum()+mAPaos[0][0].sum()+mAPbev[0][0].sum())/18
+
+    print("**********************************************")
+    print("* score {}".format(str(eval_score)))
+    print("**********************************************")
     
     return (mAP3d,result1, mAPbev, mAPaos) 
 
