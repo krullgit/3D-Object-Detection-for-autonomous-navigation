@@ -1,6 +1,6 @@
-# 3D Object Detection for Pedestrian with Pointpillars, Tensorflow, Intel Realsense d435i at 120 HZ
+# **3d** Object Detection for Pedestrian with Pointpillars, Tensorflow, Intel Realsense d435i at 120 HZ
 
-<span style="color:red">The documentation given here is not complete, due to time constraints. Since the model works very well however, it would be nice if people use it and therefore I'm happy to improve the documentation and code if there is any demand. The code is part of my master thesis, which I will make available maybe.</span>
+<span style="color:red">The documentation given here is not complete, due to time constraints. Since the model works very well however, it would be nice if people use it and therefore I'm happy to improve the documentation and code, if there is demand. Since the code is part of my master thesis, I'm thinking about releasing that as well (on request).</span>
 
 
 <p float="center">
@@ -12,19 +12,19 @@ Video Links (Youtube):
 - [Train Set 1](https://youtu.be/HQPMiLqrlv4)
 - [Train Set 2](https://youtu.be/0yEBxNRi1fc)
 - [Test Set](https://youtu.be/EqNhPrcwK7o)
-- [Augmentation Approach](https://youtu.be/dEYM5AUP3Jo)
+- [Augmentation Visualization](https://youtu.be/dEYM5AUP3Jo)
 
 Master Thesis Link:
-- Coming Soon
+- On Request
 
 # Features 
-This is an implementation of the Pointpillars algorithm. It can predict a 3D bounding box on pointclouds produced by the [Intel Realsense d435i](https://www.intelrealsense.com/depth-camera-d435i/) sensor. Please refer to [arXiv report](https://arxiv.org/abs/1812.05784) for further details as long as I didn't release my thesis.
+This is an implementation of the Pointpillars algorithm. It can predict **3d** bounding boxes on pointclouds produced by the [Intel Realsense d435i](https://www.intelrealsense.com/depth-camera-d435i/) sensor. For network details, please refer to the original paper of the authors [arXiv](https://arxiv.org/abs/1812.05784). The many customizations made are explained in my master thesis, which I release eventually (on request probably). Everything was trained and evaluated on custom data, since no public data is available for the sensor. However, with my method of a two stage training, only a couple of hundred GT annotations are needed for very good results. 
 
 This implementation:
 
 - has the code to:
     - create and annotate your own dataset with the d435i,
-    - train and eval on this datatset,
+    - train and eval,
     - put the model into production where it fetches ROS messages from the d435i and publishes the detections to another ROS topic.
 - uses Tensorflow 2.0,
 - can be converted to a tflite model to run faster on edge devices,
@@ -34,12 +34,16 @@ This implementation:
 - runs at 120 FPS on a 3090 RTX
 - incorporates and expands many functions for pre- and post processing from the official [POINTPILLARS](https://github.com/traveller59/second.pytorch) implementation especially for data-augmentation,
 - applies changes to the originally proposed architecture to better utilize the greater resultion of the d435i in comparison to the lidar scanner used in [KITTI](http://www.cvlibs.net/datasets/kitti/)
+- is able to cope with the massive noise produced by the sensor
 - code documentation
 
 Provided Data:
 - Model for inference
 - Test Data (On Request)
 - Train Data (On Request)
+
+Provided Research:
+- Master Thesis (On Request)
 
 # Overview
 1. Installation
@@ -90,12 +94,12 @@ Or just use these commands:
     - this will publish ROS messages of type "msg_PointCloud2" to the topic "/camera/depth/color/points" 
 1. Start pipeline:
     - ```python train.py evaluate configs/train.yaml```
-1. Now you should see the pointcloud of the sensor and 3D detections in RVIZ 
+1. Now you should see the pointcloud of the sensor and **3d** detections in RVIZ 
     - predictions of type "BoundingBoxArray" are published to the topic "bb_pred_guess_1"
 
 # Create Datasets
 
-It's possible to create our your dataset, if you want to train for a different type of objects. Therefore, we simply record pointclouds from the realsense sensor and save annotation files along with the pointclouds. However, to skip all the time consuming annotation work, we use a simple approach by placing the object in predefined locations with different (also predefined) rotations (in total 8 rotations, rotated by 45 degree each time and covering 360 degrees in total). This procedure can be repeated for multiple scenes to increase the variety in the training data. The following section examines this concept. However, any test data is suitable and this approach does not have to be used.
+It's possible to create our your dataset, if you want to train for a different type of objects. Therefore, we simply record pointclouds from the realsense sensor and save annotation files along with the pointclouds. However, to skip all the time consuming annotation work, we use a simple approach by placing the object in predefined locations with different (also predefined) rotations (in total 8 rotations, rotated by 45 degree each time and covering 360 degrees in total). This procedure can be repeated for multiple scenes to increase the variety in the training data. The following section examines this concept. However, any train data is suitable and this approach does not have to be used.
 
 
 ## 1. Capture Data with Annotations (for training and testing)
@@ -105,7 +109,7 @@ It's possible to create our your dataset, if you want to train for a different t
 </p>
 
 ```
-python scripts/realsense_make_dataset.py live_mode_off DATASETPATH ROTATION START_IDX END_IDX TRAIN_OR_TEST
+python scripts/realsense_make_dataset.py live_mode_off DATASETPATH ROTATION START_IDX END_IDX train
 
 For example: 
 python scripts/realsense_make_dataset.py live_mode_off data/ -3.14 0 150 train
@@ -117,8 +121,6 @@ Adjust the following params:
 * For ROTATION you need to run this command 8 times to get data for 8 rotations. The ROTATIONS are: -3.14, -2.35, -1.57, -0.78, 2.35, 1.57, 0.78, 0.00 (also you need to change START_IDX and END_IDX for every run) 
 
 * START_IDX and END_IDX: defines the naming of the annotations but also how many pointcloud you capture. For example: 0, 150 for rotation -3.14 and next time 150, 300 for rotation -2.35.
-
-* TRAIN_OR_TEST is set by you to "train" or "test" depending on if you need train or test data.
 
 In total you have to run the command 8 times (8 rotations) to get training data for every rotation. 
 You can repeat this procedure several times for different scenes, e.g. 2 times as shown in the illustration above. You have to place the object you want to record inside the bounding box shown in rviz during the execution of this file. Therefore you have to load the config: configs/rviz/production_mode.rviz in RVIZ.
@@ -203,46 +205,44 @@ Than:
 t_full_sample: 8.67, t_preprocess: 0.33, t_network: 4.67, t_predict: 3.33, t_anno: 0.56, t_rviz: 0.0
 
 Pedestrian AP@0.70, 0.50, 0.50:\
-bev&nbsp;&nbsp;  AP:89.15, 89.15, 89.15\
-3d&nbsp;&nbsp;&nbsp;&nbsp;   AP:88.40, 88.40, 88.40\
-aos&nbsp;&nbsp;  AP:65.62, 65.62, 65.62\
+**bev**&nbsp;&nbsp;  AP: 89.15\
+**3d**&nbsp;&nbsp;&nbsp;&nbsp;   AP: 88.40\
+**aos**&nbsp;&nbsp;  AP: 65.62\
 Pedestrian AP@0.75, 0.55, 0.55:\
-bev&nbsp;&nbsp;  AP:88.34, 88.34, 88.34\
-3d&nbsp;&nbsp;&nbsp;&nbsp;   AP:86.94, 86.94, 86.94\
-aos&nbsp;&nbsp;  AP:65.07, 65.07, 65.07\
+**bev**&nbsp;&nbsp;  AP: 88.34\
+**3d**&nbsp;&nbsp;&nbsp;&nbsp;   AP: 86.94\
+**aos**&nbsp;&nbsp;  AP: 65.07\
 Pedestrian AP@0.80, 0.60, 0.60:\
-bev&nbsp;&nbsp;  AP:86.58, 86.58, 86.58\
-3d&nbsp;&nbsp;&nbsp;&nbsp;   AP:71.66, 71.66, 71.66\
-aos&nbsp;&nbsp;  AP:63.90, 63.90, 63.90\
+**bev**&nbsp;&nbsp;  AP: 86.58\
+**3d**&nbsp;&nbsp;&nbsp;&nbsp;   AP: 71.66\
+**aos**&nbsp;&nbsp;  AP: 63.90\
 Pedestrian AP@0.85, 0.65, 0.65:\
-bev&nbsp;&nbsp;  AP:74.34, 74.34, 74.34\
-3d&nbsp;&nbsp;&nbsp;&nbsp;   AP:44.22, 44.22, 44.22\
-aos&nbsp;&nbsp;  AP:55.49, 55.49, 55.49\
+**bev**&nbsp;&nbsp;  AP: 74.34\
+**3d**&nbsp;&nbsp;&nbsp;&nbsp;   AP: 44.22\
+**aos**&nbsp;&nbsp;  AP: 55.49\
 Pedestrian AP@0.90, 0.70, 0.70:\
-bev&nbsp;&nbsp;  AP:54.31, 54.31, 54.31\
-3d&nbsp;&nbsp;&nbsp;&nbsp;   AP:22.44, 22.44, 22.44\
-aos&nbsp;&nbsp;  AP:41.28, 41.28, 41.28\
+**bev**&nbsp;&nbsp;  AP: 54.31\
+**3d**&nbsp;&nbsp;&nbsp;&nbsp;   AP: 22.44\
+**aos**&nbsp;&nbsp;  AP: 41.28\
 Pedestrian AP@0.95, 0.75, 0.75:\
-bev&nbsp;&nbsp;  AP:27.94, 27.94, 27.94\
-3d&nbsp;&nbsp;&nbsp;&nbsp;   AP:6.48, 6.48, 6.48\
-aos&nbsp;&nbsp;  AP:22.58, 22.58, 22.58\
-\
-score 58.59699571656798
+**bev**&nbsp;&nbsp;  AP: 27.94\
+**3d**&nbsp;&nbsp;&nbsp;&nbsp;   AP: 6.48\
+**aos**&nbsp;&nbsp;  AP: 22.58\
 
 
 
 <br/>
 
+- The first lines are refereeing to different difficulties, e.g. "Pedestrian AP@0.70, 0.50, 0.50:\" sets the difficulties for bev, 3d and aos to 0.70, 0.50, 0.50, respectively (numbers refer to IoU). Also, I have set the whole evaluation harder than KITTI (higher IoU), due to the great performance.
+- As seen, also the time is measured. "t_full_sample" means the milliseconds for one sample. 
 - **AP**: Mean average precision (mAP). Average of the maximum precision at different recall values.
 - **bev**: Bird's eye view overlap (2D) of prediction and ground truth.
-- **3d**: 3D overlap of prediction and ground truth.
+- **3d**: 3d overlap of prediction and ground truth.
 - **aos**: Average orientation similarity of prediction and ground truth jointly with object detection.
 
 
 - Predictions are stored in the "out/model_\<modelNumber>" folder 
 - For visualization see [Visualize Results in RVIZ](#Visualize-Results-in-RVIZ)
-
-
 
 ## Evaluate Model on Test Dataset (without Annotations)
 
