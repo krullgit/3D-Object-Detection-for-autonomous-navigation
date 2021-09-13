@@ -1,6 +1,6 @@
 # **3d** Object Detection for Pedestrian with Pointpillars, Tensorflow, Intel Realsense d435i at 120 HZ
 
-<span style="color:red">The documentation given here is not complete, due to time constraints. Since the model works very well however, it would be nice if people use it and therefore I'm happy to improve the documentation and code, if there is demand. Since the code is part of my master thesis, I'm thinking about releasing that as well (on request).</span>
+:construction:	The documentation given here **is not complete**, due to time constraints. Since the model works very well however, it would be nice if people use it and therefore I'm happy to improve the documentation and code, if there is demand. Since the code is part of my master thesis, I'm thinking about releasing that as well (on request).
 
 
 <p float="center">
