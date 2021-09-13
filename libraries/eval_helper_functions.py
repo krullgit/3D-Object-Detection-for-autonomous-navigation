@@ -70,7 +70,7 @@ def remove_low_score(image_anno, thresh):
 
 # sends a list of 3D boxes to a ros publisher 
 # =========================================
-def send_3d_bbox(centers, dims, angles, publisher, header):
+def send_3d_bbox(centers, dims, angles, publisher, header, confidences=None):
     """
     param center: list of x,y,z
     dims: list of h, w, l
@@ -114,7 +114,12 @@ def send_3d_bbox(centers, dims, angles, publisher, header):
         box_pred.pose.position.x = pred_x
         box_pred.pose.position.y = pred_y
         box_pred.pose.position.z = pred_z
+        
+        # the confidences are simetimes given to create a confidence map of the output of the network
+        if confidences is not None:
+            box_pred.value = max(-10.0, confidences[i])
         # possible modofications 
+        
         #print("Location :",location_array[i][0],location_array[i][1],location_array[i][2])
         #rotation_pred = quaternion_about_axis(pred_r_y+(np.pi/2),(0,1,0))
         #rotation_pred = quaternion_about_axis(-np.pi/2,(0,0,1))

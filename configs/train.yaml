@@ -2,31 +2,31 @@
 project_dir_base: "/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc"
 training : None # is just a placeholder and is set in the train.py directly 
 model_id: "1" # This defines the naming of the newly trained model, if already exists it will count up by 1 recursively
-# differentiate between input data
+# differentiate between input data 
 custom_dataset: True # if True, the datapipeline for the realsense 435i data is used
 
-# general train params
-epochs_total: 160 # how many epochs to train
+# general train params 
+epochs_total: 260 # how many epochs to train
 load_weights: False
 do_evaluate: True # If True, we will do an evaluation after each epoch during training 
 
 # eval general params
 measure_time: False
 measure_time_extended: False
-eval_model_id: "103" #"531" #"496" #  whats the name of the folder of the trained model
-eval_checkpoint: "/model_weights_0.h5" #"/model_weights_46.h5" # Option: [model_weights_temp, model_weights_0] # which checkpoint of the model we want to use. The number in "model_weights_0" defines the epoch 
+eval_model_id: "345" # h1:"367" h2:345  #  whats the name of the folder of the trained model
+eval_checkpoint: "/model_weights_48.h5" # h1:94 h2:48 # Option: [model_weights_temp, model_weights_0] # which checkpoint of the model we want to use. The number in "model_weights_0" defines the epoch 
 # "no_annos_mode" in "eval_input_reader" must also be set
 
 # eval production_mode params
 production_mode: False # If true  we take new pointclouds from a realsense live stream
-prediction_min_score: 0.3 # this is only used in production_mode = True # removes prediction scores lower than x
+prediction_min_score: 0.45 # this is only used in production_mode = True # removes prediction scores lower than x
 
 # input_reader general
 cache : False  # do we have a buffer/cache (where is the difference?) // seems to overfloat the memory, so better set to False always 
 shuffle_buffer_size : 1  # set how many (shuffle_buffer_size) datapoints are in the buffer where elements are randomly selected from
 buffer_size : AUTOTUNE # how many datapoints are stored in buffer for the network / `prefetch` lets the dataset fetch batches in the background while the model is training.
-iterate_samples_in_debug_mode: False  # Allows better debugging of data_loader.py # if True no tf dataset generator is created but the point clouds are preprocessed as usual
-debug_save_points: False # if True the intermediate steps in the point cloud preprocessing are sent to rviz
+iterate_samples_in_debug_mode: True  # Allows better debugging of data_loader.py # if True no tf dataset generator is created but the point clouds are preprocessed as usual
+debug_save_points: True # if True the intermediate steps in the point cloud preprocessing are sent to rviz
 
 # Dataloader for training
 train_input_reader:
@@ -37,18 +37,28 @@ train_input_reader:
   # sampler
   sampler_info_path : "/home/makr/Documents/data/pedestrian_3d_own/1/object/kitti_dbinfos_train.pkl"
   sample_classes: ["Pedestrian"] # objects we want to randomly place inside the pointcloud 
+
+  # sample_max_nums: [0] # baseline
   sample_max_nums: [8] # [8], [0] for transferLEARNING # number of objects we want to randomly place inside the pointcloud 
+
   sampler_max_point_collision: 500 # maximum number of points in the point cloud the sampled object can overlap (take the same 3D space)
   sampler_min_point_collision: 1 # minumum number of points in the point cloud the sampled object must overlap (take the same 3D space)
   sampler_noise_x_closer: [-0.8,+0.2] # x cood # in which interval the samples are randomly translated that are more than sampler_noise_x_point away
   sampler_noise_x_farther: [-0.2,+1.5] # x cood # in which interval the samples are randomly translated that are less than sampler_noise_x_point away
+
   sampler_noise_x_point: 2.5 # x cood # see sampler_noise_x_closer and sampler_noise_x_farther
+
   sampler_noise_y: [-1.25, 1.25] # y cood # in which interval the samples are randomly translated
 
   desired_objects : ["Pedestrian"] # these are the object we consoider in out dataloader pipeline
 
   num_point_features : 3 # defines how many features are given by he training data # 3 is minimum stands for x,y,z 
-  feature_map_size :  [1,64,76] # [channel, width, height] for the input feature map
+
+  # feature_map_size :  [1,248,296] # baseline
+  # feature_map_size :  [1,64,80] # baseline
+  # feature_map_size :  [1,256,320] # baseline
+  feature_map_size :  [1,64,80] # [channel, width, height] for the input feature map
+  
   batch_size : 2 # the batch size for training 
 
   # parameter for augmentation
@@ -79,8 +89,14 @@ eval_input_reader:
   desired_objects : ["Pedestrian"] # these are the object we consoider in out dataloader pipeline # if changed also change num_class
   
   num_point_features : 3 # defines how many features are given by he training data # 3 is minimum stands for x,y,z 
-  # feature_map_size :  [1,248,296] # [channel, width, height] for the input feature map
-  feature_map_size :  [1,64,76] # [channel, width, height] for the input feature map
+  # feature_map_size :  [1,248,248] # [channel, width, height] for the input feature map
+  # feature_map_size :  [1,32,48] # [channel, width, height] for the input feature map
+
+  # feature_map_size :  [1,248,296] # baseline
+  # feature_map_size :  [1,64,80] # baseline
+  # feature_map_size :  [1,256,320] # baseline
+  feature_map_size :  [1,64,80] # [channel, width, height] for the input feature map
+
   batch_size : 1 # the batch size for training 
   
   anchor_area_threshold: 1 
@@ -89,13 +105,18 @@ eval_input_reader:
 model:
   second:
     voxel_generator:
-      #point_cloud_range : [0, -19.84, -2.5, 47.36, 19.84, 2.0] # in meter # outside this range points will be deleted (in the point to voxel assignment process) # is used for the grid_size, creating voxels and creating anchors
+      # point_cloud_range : [0, -19.84, -3.0, 47.36, 19.84, 3.0] # baseline
+      # point_cloud_range : [0, -5.12, -3.0, 12.8, 5.12, 3.0] # baseline
       # point_cloud_range : [0, -9.92, -3.0, 23.68, 9.92, 3.0] # x_min,y_min,z_min,x_max,y_max,z_max in meter # outside this range points will be deleted (in the point to voxel assignment process) # is used for the grid_size, creating voxels and creating anchors
-      point_cloud_range : [0, -2.56, -3.0, 6.08, 2.56, 3.0] # x_min,y_min,z_min,x_max,y_max,z_max in meter # outside this range points will be deleted (in the point to voxel assignment process) # is used for the grid_size, creating voxels and creating anchors
-      # voxel_size : [0.08, 0.08, 4.0] # This is the size of the voxels beeing created # Z must be the same as the Z range in point_cloud_range # If Z too small points in height will be truncated
+      # point_cloud_range : [0, -2.56, -3.0, 7.68, 2.56, 3.0] # x_min,y_min,z_min,x_max,y_max,z_max in meter # outside this range points will be deleted (in the point to voxel assignment process) # is used for the grid_size, creating voxels and creating anchors
+      point_cloud_range : [0, -2.56, -3.0, 6.40, 2.56, 3.0] # x_min,y_min,z_min,x_max,y_max,z_max in meter # outside this range points will be deleted (in the point to voxel assignment process) # is used for the grid_size, creating voxels and creating anchors
+      
+      # voxel_size : [0.16, 0.16, 4.0] # baseline
       voxel_size : [0.08, 0.08, 4.0] # This is the size of the voxels beeing created # Z must be the same as the Z range in point_cloud_range # If Z too small points in height will be truncated
-      max_number_of_points_per_voxel : 200 # max number of poits per voxel, they will be randomly sampled if to many
+      
+      max_number_of_points_per_voxel : 50 # baseline
       # max_number_of_points_per_voxel : 200 # max number of poits per voxel, they will be randomly sampled if to many
+      
       max_number_of_voxels: 12000 # max number of voxels
     num_class: 1 # how many desired_objects we have 
     voxel_feature_extractor: # params for the PillarFeatureNet
@@ -146,11 +167,15 @@ model:
     direction_loss_weight: 0.5 # Final Loss weight for direction
 
     # Postprocess
-    post_center_limit_range: [0, -2.56, -3.0, 6.08, 2.56, 3.0]
+    # post_center_limit_range : [0, -19.84, -3.0, 47.36, 19.84, 3.0] # baseline
+    # post_center_limit_range: [0, -5.12, -3.0, 12.8, 5.12, 3.0] # baseline
+    # post_center_limit_range : [0, -10.24, -3.0, 25.6, 10.24, 3.0] # baseline
+    post_center_limit_range: [0, -2.56, -3.0, 6.40, 2.56, 3.0]
+
     use_multi_class_nms: false # true is not implemented yet
     nms_pre_max_size: 100 # maximum number of prediction go to nms
     nms_post_max_size: 50 # maximum number of prediction out from nms
-    nms_score_threshold: 0.1 # minimum prediction probability, everything below is deleted # is set to 0.0 since the implentation is slow
+    nms_score_threshold: 0.0 # minimum prediction probability, everything below is deleted # is set to 0.0 since the implentation is slow
     nms_iou_threshold: 0.5 # if 2D iou from first prediction to other prediction is greater than this the other prediction(s) gets deleted (regular nms logic)
     num_point_features: 3 # Options[3,4] # 4 for Kitti, 3 for custom 
     without_reflectivity: false
@@ -159,8 +184,13 @@ model:
       anchor_generators:  
         anchor_generator_stride:
           sizes: [0.6, 0.8, 1.73] # width, length, and height of anchors 
+
+          # strides: [0.16, 0.16, 0.0] # baseline
           strides: [0.08, 0.08, 0.0] # z_stride will be ignored since anchors have only one height # stride for the anchors (detemermines therefore the overlap of anchors since "sizes" is bigger than strides), this should therefore match "voxel_size": I dont know if it would work to have different strides and voxel_size
+          
+          # offsets: [0.16, -2.56, -1.465] # baseline
           offsets: [0.08, -2.56, -1.465] # this defines the center of all anchors (globally speaking?)
+
           rotations: [0, 1.57] # 0, pi/2
           matched_threshold : 0.5 # iou greater than matched_threshold will be treated as positives.
           unmatched_threshold : 0.35 # iou smaller than unmatched_threshold will be treated as negatives.
@@ -169,27 +199,765 @@ model:
       rpn_batch_size : 512 
         
 # Optimizer 
-train_config: 
-  optimizer:  
-    adam_optimizer: 
-      learning_rate: 
+train_config:
+  optimizer: 
+    adam_optimizer:
+      learning_rate:
         exponential_decay_learning_rate: 
-          initial_learning_rate: 0.002 #0.002, 0.0002 for transferLEARNING # learning rate we start with
+          initial_learning_rate: 0.002 #0.002, 0.005 for transferLEARNING # learning rate we start with
           decay_steps: 7000 # 4800 for batch size 2 and 2400 samples #27840 # 1856 steps per epoch * 15 epochs # TODO umrechnen auf batch_size 1
           decay_factor: 0.8
           staircase: False # if false, there will be   a smooth transition from one learning rate to the next learning rate
       weight_decay: 0.0001
   net_metrics_steps: 500 # after how many steps (batch iteration) the metrics eval must be shown
-  
-for transfer learning:
+
+
+# for transfer learning:
+# in load_data set bool_sampling to False 
 # search here for "transferLEARNING" and replace as suggest
 # here, set load_weights: True
 # in train.pl replace models for loading 
-# replace test dataset with real annotated test dataset
-# in load_data.py uncomment # limit for transfer learning and comment # limit for training
-# in load_data.py change low_likelyhood = bool(random.getrandbits(1)) to low_likelyhood = False
+# in load_data.py uncomment #   g and comment # limit for training
+# in load_data.py disable "truncatee"
 
-# model 79:
+# for baseline settings:
+# serach for baseline here
+# in load_data.py search "sample_height_half = info["box3d_lidar"][5]/2.0" and set false
+# in voxelnet.py set all SeparableConv2D to conv2d
+# make 
+
+
+# model 156 : 64 VFE features, 800 points per voxel
+# t_full_sample: 15.66, t_preprocess: 0.52, t_network: 10.95, t_predict: 4.22, t_anno: 0.4, t_rviz: 0.0
+
+# model 167 : 96 VFE features, 400 points per voxel
+# t_full_sample: 13.9, t_preprocess: 0.38, t_network: 10.09, t_predict: 3.31, t_anno: 0.43, t_rviz: 0.0
+
+# model 156 : 128 VFE features, 800 points per voxel
+# t_full_sample: 14.59, t_preprocess: 0.48, t_network: 10.55, t_predict: 3.53, t_anno: 0.38, t_rviz: 0.0
+
+# model 79: 128 VFE features, 200 points per voxel
 # t_full_sample: 12.38, t_preprocess: 0.37, t_network: 8.01, t_predict: 3.79, t_anno: 0.5, t_rviz: 0.0
 
-# model 96:
+# model 192 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers
+# t_full_sample: 12.39, t_preprocess: 0.41, t_network: 6.71, t_predict: 5.19, t_anno: 0.43, t_rviz: 0.0
+
+# model 199 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,4
+# t_full_sample: 10.22, t_preprocess: 0.22, t_network: 6.67, t_predict: 3.11, t_anno: 0.44, t_rviz: 0.0
+# model 199 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,1
+# t_full_sample: 10.11, t_preprocess: 0.22, t_network: 5.44, t_predict: 4.11, t_anno: 0.44, t_rviz: 0.0
+
+# final
+# model 213_16 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,1
+# t_full_sample: 10.0, t_preprocess: 0.33, t_network: 6.33, t_predict: 3.33, t_anno: 0.11, t_rviz: 0.0
+# t_voxel_features: 451.0
+# t_spatial_features: 116.0
+# t_rpn: 149.0
+# t_nms_func: 1.66
+# model 213 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,4
+# t_full_sample: 9.33, t_preprocess: 0.33, t_network: 6.0, t_predict: 2.78, t_anno: 0.44, t_rviz: 0.0
+# t_voxel_features: 458.0------> ] 99 %
+# t_spatial_features: 121.0
+# t_rpn: 164.0
+# t_nms_func: 1.71
+
+
+
+
+# 278: 128 VFE features, 100 points per voxel, all SeparableConv2D layers but heads, nms 0.4 FM:256x320
+# t_full_sample: 17.78, t_preprocess: 0.44, t_network: 8.44, t_predict: 8.56, t_anno: 0.67, t_rviz: 0.0, 
+
+# 278: 128 VFE features, 100 points per voxel, all SeparableConv2D layers but heads, nms 0.4 FM:64X80
+# t_full_sample: 9.33, t_preprocess: 0.11, t_network: 5.33, t_predict: 3.33, t_anno: 0.44, t_rviz: 0.0
+# t_full_sample: 7.78, t_preprocess: 0.33, t_network: 5.11, t_predict: 2.0, t_anno: 0.67, t_rviz: 0.0
+# t_full_sample: 9.0, t_preprocess: 1.0, t_network: 5.0, t_predict: 3.33, t_anno: 0.67, t_rviz: 0.0
+# t_full_sample: 8.22, t_preprocess: 0.33, t_network: 6.22, t_predict: 1.56, t_anno: 0.44, t_rviz: 0.0
+
+
+
+
+# model 218 : 128 VFE features, 800 points per voxel, all SeparableConv2D layers but heads, 16x16 voxel, nmss= 0,4
+# t_voxel_features: 442.0
+# t_spatial_features: 118.0
+# t_rpn: 153.0
+# t_full_sample: 7.67, t_preprocess: 0.33, t_network: 6.0, t_predict: 1.56, t_anno: 0.0, t_rviz: 0.0
+# t_full_sample: 8.89, t_preprocess: 0.44, t_network: 5.0, t_predict: 3.56, t_anno: 0.33, t_rviz: 0.0
+
+# mention:
+# thta we probably need the same amount of samples for every new class
+# add a visulaization of how many points are optimal per voxel (show points in rviz)
+# Train in Germany, Test in The USA: Making 3D Object Detectors Generalize -> there is a nice illu with points per object
+  # compare pedestrian in kitti with one in d435i in point cloud perspective
+# show how much more pillars are occupied by point in comparison to KITTI
+# write about the test system
+# show amount of params of the network
+
+
+# a1 278: 128 VFE features, 100 points per voxel, all SeparableConv2D layers but heads, nms 0.4 FM:256x320
+# t_full_sample: 17.78, t_preprocess: 0.44, t_network: 8.44, t_predict: 8.56, t_anno: 0.67, t_rviz: 0.0, 
+
+# B2 285_26
+# t_full_sample: 9.78, t_preprocess: 0.22, t_network: 5.11, t_predict: 3.56, t_anno: 1.11, t_rviz: 0.0
+# t_voxel_features: 466.0
+# t_spatial_features: 124.0
+# t_rpn: 141.0
+# t_full_sample: 9.33, t_preprocess: 0.56, t_network: 5.22, t_predict: 3.0, t_anno: 1.11, t_rviz: 0.0
+# t_voxel_features: 453.0------> ] 99 %
+# t_spatial_features: 121.0
+# t_rpn: 137.0
+# t_nms_func: 1.91
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:33.96, 33.96, 33.96
+# 3d   AP:14.04, 14.04, 14.04
+# aos  AP:11.20, 11.20, 11.20
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:24.27, 24.27, 24.27
+# 3d   AP:7.85, 7.85, 7.85
+# aos  AP:8.32, 8.32, 8.32
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:15.72, 15.72, 15.72
+# 3d   AP:5.16, 5.16, 5.16
+# aos  AP:5.76, 5.76, 5.76
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:7.79, 7.79, 7.79
+# 3d   AP:4.55, 4.55, 4.55
+# aos  AP:2.16, 2.16, 2.16
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:6.89, 6.89, 6.89
+# 3d   AP:4.55, 4.55, 4.55
+# aos  AP:1.30, 1.30, 1.30
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:1.96, 1.96, 1.96
+# 3d   AP:0.35, 0.35, 0.35
+# aos  AP:0.56, 0.56, 0.56
+# **********************************************
+# * score 8.687506271322121
+# **********************************************
+
+# B3 287_22
+# t_full_sample: 8.89, t_preprocess: 0.11, t_network: 4.56, t_predict: 3.33, t_anno: 0.89, t_rviz: 0.0
+# t_voxel_features: 461.0------> ] 99 %
+# t_spatial_features: 123.0
+# t_rpn: 141.0
+# t_nms_func: 1.97
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:35.36, 35.36, 35.36
+# 3d   AP:24.78, 24.78, 24.78
+# aos  AP:25.47, 25.47, 25.47
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:21.06, 21.06, 21.06
+# 3d   AP:14.92, 14.92, 14.92
+# aos  AP:16.66, 16.66, 16.66
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:15.55, 15.55, 15.55
+# 3d   AP:11.19, 11.19, 11.19
+# aos  AP:13.15, 13.15, 13.15
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:11.95, 11.95, 11.95
+# 3d   AP:1.01, 1.01, 1.01
+# aos  AP:11.00, 11.00, 11.00
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:10.46, 10.46, 10.46
+# 3d   AP:0.37, 0.37, 0.37
+# aos  AP:9.88, 9.88, 9.88
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:9.09, 9.09, 9.09
+# 3d   AP:0.32, 0.32, 0.32
+# aos  AP:8.99, 8.99, 8.99
+# **********************************************
+# * score 13.400627247814239
+# **********************************************
+
+# B4 289_34
+# t_voxel_features: 483.0
+# t_spatial_features: 126.0
+# t_rpn: 145.0
+# t_nms_func: 1.95
+# t_full_sample: 9.78, t_preprocess: 0.22, t_network: 5.56, t_predict: 3.56, t_anno: 0.56, t_rviz: 0.0
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:69.41, 69.41, 69.41
+# 3d   AP:49.83, 49.83, 49.83
+# aos  AP:30.72, 30.72, 30.72
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:42.94, 42.94, 42.94
+# 3d   AP:30.95, 30.95, 30.95
+# aos  AP:18.30, 18.30, 18.30
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:31.87, 31.87, 31.87
+# 3d   AP:22.05, 22.05, 22.05
+# aos  AP:12.58, 12.58, 12.58
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:21.53, 21.53, 21.53
+# 3d   AP:13.49, 13.49, 13.49
+# aos  AP:7.81, 7.81, 7.81
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:13.47, 13.47, 13.47
+# 3d   AP:10.45, 10.45, 10.45
+# aos  AP:3.32, 3.32, 3.32
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:2.88, 2.88, 2.88
+# 3d   AP:1.59, 1.59, 1.59
+# aos  AP:1.40, 1.40, 1.40
+# **********************************************
+# * score 21.367179304695302
+# **********************************************
+
+
+# B5 290_46
+# t_voxel_features: 454.0
+# t_spatial_features: 122.0
+# t_rpn: 138.0
+# t_nms_func: 1.93
+# t_full_sample: 9.11, t_preprocess: 0.67, t_network: 5.0, t_predict: 3.11, t_anno: 1.0, t_rviz: 0.0
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:66.41, 66.41, 66.41
+# 3d   AP:50.96, 50.96, 50.96
+# aos  AP:15.36, 15.36, 15.36
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:42.83, 42.83, 42.83
+# 3d   AP:28.85, 28.85, 28.85
+# aos  AP:9.07, 9.07, 9.07
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:26.41, 26.41, 26.41
+# 3d   AP:14.66, 14.66, 14.66
+# aos  AP:6.34, 6.34, 6.34
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:16.07, 16.07, 16.07
+# 3d   AP:7.43, 7.43, 7.43
+# aos  AP:4.37, 4.37, 4.37
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:7.82, 7.82, 7.82
+# 3d   AP:3.81, 3.81, 3.81
+# aos  AP:2.20, 2.20, 2.20
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:2.99, 2.99, 2.99
+# 3d   AP:0.83, 0.83, 0.83
+# aos  AP:1.02, 1.02, 1.02
+# **********************************************
+# * score 17.078937887061322
+# **********************************************
+
+# C 293_33
+# t_rpn: 137.0
+# t_nms_func: 1.42
+# t_full_sample: 8.22, t_preprocess: 0.44, t_network: 4.89, t_predict: 3.11, t_anno: 0.11, t_rviz: 0.0
+# bev  AP:89.29, 89.29, 89.29
+# 3d   AP:78.22, 78.22, 78.22
+# aos  AP:42.74, 42.74, 42.74
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:86.42, 86.42, 86.42
+# 3d   AP:64.78, 64.78, 64.78
+# aos  AP:41.09, 41.09, 41.09
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:74.85, 74.85, 74.85
+# 3d   AP:49.11, 49.11, 49.11
+# aos  AP:36.05, 36.05, 36.05
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:52.06, 52.06, 52.06
+# 3d   AP:16.84, 16.84, 16.84
+# aos  AP:24.59, 24.59, 24.59
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:28.40, 28.40, 28.40
+# 3d   AP:8.73, 8.73, 8.73
+# aos  AP:13.05, 13.05, 13.05
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:13.23, 13.23, 13.23
+# 3d   AP:5.40, 5.40, 5.40
+# aos  AP:5.88, 5.88, 5.88
+# **********************************************
+# * score 40.595783076996355
+# **********************************************
+
+# d2 294_32
+# t_voxel_features: 456.0
+# t_spatial_features: 123.0
+# t_rpn: 139.0
+# t_nms_func: 2.21
+# t_full_sample: 9.44, t_preprocess: 0.56, t_network: 5.67, t_predict: 3.44, t_anno: 0.33, t_rviz: 0.0
+# t_voxel_features: 478.0
+# t_spatial_features: 123.0
+# t_rpn: 143.0
+# t_nms_func: 1.96
+# t_full_sample: 10.33, t_preprocess: 0.22, t_network: 6.56, t_predict: 2.89, t_anno: 0.89, t_rviz: 0.0
+# bev  AP:85.00, 85.00, 85.00
+# 3d   AP:81.49, 81.49, 81.49
+# aos  AP:42.48, 42.48, 42.48
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:79.97, 79.97, 79.97
+# 3d   AP:72.53, 72.53, 72.53
+# aos  AP:40.05, 40.05, 40.05
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:71.29, 71.29, 71.29
+# 3d   AP:57.06, 57.06, 57.06
+# aos  AP:35.45, 35.45, 35.45
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:55.10, 55.10, 55.10
+# 3d   AP:35.47, 35.47, 35.47
+# aos  AP:27.82, 27.82, 27.82
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:37.35, 37.35, 37.35
+# 3d   AP:21.30, 21.30, 21.30
+# aos  AP:18.57, 18.57, 18.57
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:23.13, 23.13, 23.13
+# 3d   AP:12.09, 12.09, 12.09
+# aos  AP:11.62, 11.62, 11.62
+# **********************************************
+# * score 44.87653282150445
+# **********************************************
+
+# d3 295_10
+# t_voxel_features: 446.0
+# t_spatial_features: 120.0
+# t_rpn: 136.0
+# t_nms_func: 1.75
+# t_full_sample: 9.89, t_preprocess: 0.44, t_network: 6.0, t_predict: 3.44, t_anno: 0.44, t_rviz: 0.0
+# t_voxel_features: 444.0------> ] 99 %
+# t_spatial_features: 117.0
+# t_rpn: 135.0
+# t_nms_func: 1.71
+# t_full_sample: 10.33, t_preprocess: 0.22, t_network: 6.56, t_predict: 3.11, t_anno: 0.67, t_rviz: 0.0
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:83.26, 83.26, 83.26
+# 3d   AP:80.22, 80.22, 80.22
+# aos  AP:35.31, 35.31, 35.31
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:80.90, 80.90, 80.90
+# 3d   AP:71.48, 71.48, 71.48
+# aos  AP:34.33, 34.33, 34.33
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:69.69, 69.69, 69.69
+# 3d   AP:49.79, 49.79, 49.79
+# aos  AP:29.49, 29.49, 29.49
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:47.09, 47.09, 47.09
+# 3d   AP:28.79, 28.79, 28.79
+# aos  AP:19.18, 19.18, 19.18
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:31.37, 31.37, 31.37
+# 3d   AP:15.94, 15.94, 15.94
+# aos  AP:12.27, 12.27, 12.27
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:12.79, 12.79, 12.79
+# 3d   AP:4.30, 4.30, 4.30
+# aos  AP:4.87, 4.87, 4.87
+# **********************************************
+# * score 39.50349859938831
+# **********************************************
+
+# d1 295_10
+# t_voxel_features: 443.0
+# t_spatial_features: 120.0
+# t_rpn: 135.0
+# t_nms_func: 1.8
+# t_full_sample: 9.56, t_preprocess: 0.0, t_network: 5.22, t_predict: 3.33, t_anno: 0.67, t_rviz: 0.0
+# t_voxel_features: 448.0------> ] 99 %
+# t_spatial_features: 120.0
+# t_rpn: 135.0
+# t_nms_func: 1.84
+# t_full_sample: 9.0, t_preprocess: 0.44, t_network: 5.0, t_predict: 3.33, t_anno: 0.56, t_rviz: 0.0
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:87.15, 87.15, 87.15
+# 3d   AP:79.84, 79.84, 79.84
+# aos  AP:45.43, 45.43, 45.43
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:83.66, 83.66, 83.66
+# 3d   AP:69.36, 69.36, 69.36
+# aos  AP:43.06, 43.06, 43.06
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:75.02, 75.02, 75.02
+# 3d   AP:53.62, 53.62, 53.62
+# aos  AP:37.87, 37.87, 37.87
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:58.86, 58.86, 58.86
+# 3d   AP:36.13, 36.13, 36.13
+# aos  AP:28.92, 28.92, 28.92
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:34.98, 34.98, 34.98
+# 3d   AP:22.75, 22.75, 22.75
+# aos  AP:16.81, 16.81, 16.81
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:22.95, 22.95, 22.95
+# 3d   AP:15.05, 15.05, 15.05
+# aos  AP:11.12, 11.12, 11.12
+# **********************************************
+# * score 45.697922583716725
+# **********************************************
+
+# e1 299_28
+# t_voxel_features: 449.0
+# t_spatial_features: 120.0
+# t_rpn: 139.0
+# t_nms_func: 1.46
+# t_full_sample: 10.33, t_preprocess: 0.44, t_network: 7.0, t_predict: 3.0, t_anno: 0.33, t_rviz: 0.0
+# t_voxel_features: 454.0------> ] 99 %
+# t_spatial_features: 122.0
+# t_rpn: 140.0
+# t_nms_func: 1.84
+# t_full_sample: 8.44, t_preprocess: 0.33, t_network: 4.67, t_predict: 3.33, t_anno: 0.44, t_rviz: 0.0
+# t_full_sample: 8.56, t_preprocess: 0.33, t_network: 4.89, t_predict: 3.11, t_anno: 0.56, t_rviz: 0.0
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:82.95, 82.95, 82.95
+# 3d   AP:80.71, 80.71, 80.71
+# aos  AP:49.18, 49.18, 49.18
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:77.48, 77.48, 77.48
+# 3d   AP:64.52, 64.52, 64.52
+# aos  AP:45.90, 45.90, 45.90
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:70.40, 70.40, 70.40
+# 3d   AP:47.32, 47.32, 47.32
+# aos  AP:40.71, 40.71, 40.71
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:53.71, 53.71, 53.71
+# 3d   AP:26.37, 26.37, 26.37
+# aos  AP:30.75, 30.75, 30.75
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:33.53, 33.53, 33.53
+# 3d   AP:14.71, 14.71, 14.71
+# aos  AP:19.28, 19.28, 19.28
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:22.62, 22.62, 22.62
+# 3d   AP:10.02, 10.02, 10.02
+# aos  AP:12.76, 12.76, 12.76
+# **********************************************
+# * score 43.493899387889414
+# **********************************************
+
+# e2 301_30
+# t_voxel_features: 461.0
+# t_spatial_features: 122.0
+# t_rpn: 153.0
+# t_nms_func: 1.89
+# t_full_sample: 9.56, t_preprocess: 0.22, t_network: 5.33, t_predict: 3.78, t_anno: 0.44, t_rviz: 0.0
+# t_full_sample: 8.67, t_preprocess: 0.44, t_network: 5.11, t_predict: 3.22, t_anno: 0.22, t_rviz: 0.0
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:84.75, 84.75, 84.75
+# 3d   AP:75.90, 75.90, 75.90
+# aos  AP:45.34, 45.34, 45.34
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:76.43, 76.43, 76.43
+# 3d   AP:60.32, 60.32, 60.32
+# aos  AP:40.25, 40.25, 40.25
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:69.01, 69.01, 69.01
+# 3d   AP:38.37, 38.37, 38.37
+# aos  AP:36.53, 36.53, 36.53
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:54.31, 54.31, 54.31
+# 3d   AP:20.07, 20.07, 20.07
+# aos  AP:27.79, 27.79, 27.79
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:38.18, 38.18, 38.18
+# 3d   AP:12.44, 12.44, 12.44
+# aos  AP:19.65, 19.65, 19.65
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:24.42, 24.42, 24.42
+# 3d   AP:9.57, 9.57, 9.57
+# aos  AP:12.54, 12.54, 12.54
+# **********************************************
+# * score 41.4385824339504
+# **********************************************
+
+# e3 302_29
+# t_voxel_features: 450.0
+# t_spatial_features: 122.0
+# t_rpn: 139.0
+# t_nms_func: 1.74
+# t_voxel_features: 443.0
+# t_spatial_features: 120.0
+# t_rpn: 135.0
+# t_nms_func: 2.04
+# t_full_sample: 9.67, t_preprocess: 0.44, t_network: 5.33, t_predict: 3.89, t_anno: 0.33, t_rviz: 0.0
+# t_full_sample: 11.0, t_preprocess: 0.33, t_network: 6.56, t_predict: 3.78, t_anno: 0.67, t_rviz: 0.0
+# bev  AP:88.15, 88.15, 88.15
+# 3d   AP:78.32, 78.32, 78.32
+# aos  AP:40.96, 40.96, 40.96
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:81.78, 81.78, 81.78
+# 3d   AP:67.05, 67.05, 67.05
+# aos  AP:38.42, 38.42, 38.42
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:70.81, 70.81, 70.81
+# 3d   AP:55.50, 55.50, 55.50
+# aos  AP:33.38, 33.38, 33.38
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:56.41, 56.41, 56.41
+# 3d   AP:37.40, 37.40, 37.40
+# aos  AP:25.97, 25.97, 25.97
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:37.61, 37.61, 37.61
+# 3d   AP:23.18, 23.18, 23.18
+# aos  AP:16.11, 16.11, 16.11
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:21.87, 21.87, 21.87
+# 3d   AP:15.56, 15.56, 15.56
+# aos  AP:9.16, 9.16, 9.16
+# **********************************************
+# * score 44.313727102395745
+# **********************************************
+
+
+# e4 307_27
+# t_voxel_features: 462.0
+# t_spatial_features: 122.0
+# t_rpn: 135.0
+# t_nms_func: 1.77
+# t_full_sample: 10.89, t_preprocess: 0.56, t_network: 6.89, t_predict: 3.89, t_anno: 0.0, t_rviz: 0.0
+# t_voxel_features: 443.0
+# t_spatial_features: 118.0
+# t_rpn: 135.0
+# t_nms_func: 1.48
+# t_full_sample: 10.89, t_preprocess: 0.33, t_network: 7.22, t_predict: 3.0, t_anno: 0.22, t_rviz: 0.0
+# bev  AP:86.50, 86.50, 86.50
+# 3d   AP:85.02, 85.02, 85.02
+# aos  AP:51.01, 51.01, 51.01
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:78.68, 78.68, 78.68
+# 3d   AP:71.21, 71.21, 71.21
+# aos  AP:46.01, 46.01, 46.01
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:65.84, 65.84, 65.84
+# 3d   AP:54.34, 54.34, 54.34
+# aos  AP:37.83, 37.83, 37.83
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:51.68, 51.68, 51.68
+# 3d   AP:32.46, 32.46, 32.46
+# aos  AP:29.83, 29.83, 29.83
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:33.02, 33.02, 33.02
+# 3d   AP:18.13, 18.13, 18.13
+# aos  AP:19.18, 19.18, 19.18
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:18.11, 18.11, 18.11
+# 3d   AP:11.83, 11.83, 11.83
+# aos  AP:10.13, 10.13, 10.13
+# **********************************************
+# * score 44.489092972572465
+# **********************************************
+
+# f 303_27
+# t_voxel_features: 444.0
+# t_spatial_features: 119.0
+# t_rpn: 134.0
+# t_nms_func: 1.87
+# t_full_sample: 8.89, t_preprocess: 0.44, t_network: 4.89, t_predict: 3.78, t_anno: 0.22, t_rviz: 0.0
+# t_full_sample: 9.67, t_preprocess: 0.22, t_network: 5.89, t_predict: 3.22, t_anno: 0.56, t_rviz: 0.0
+# bev  AP:84.36, 84.36, 84.36
+# 3d   AP:78.57, 78.57, 78.57
+# aos  AP:42.63, 42.63, 42.63
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:80.11, 80.11, 80.11
+# 3d   AP:60.26, 60.26, 60.26
+# aos  AP:40.38, 40.38, 40.38
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:69.91, 69.91, 69.91
+# 3d   AP:35.47, 35.47, 35.47
+# aos  AP:35.52, 35.52, 35.52
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:56.86, 56.86, 56.86
+# 3d   AP:19.59, 19.59, 19.59
+# aos  AP:28.12, 28.12, 28.12
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:31.43, 31.43, 31.43
+# 3d   AP:12.02, 12.02, 12.02
+# aos  AP:14.32, 14.32, 14.32
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:17.66, 17.66, 17.66
+# 3d   AP:1.15, 1.15, 1.15
+# aos  AP:8.30, 8.30, 8.30
+# **********************************************
+# * score 39.81553488753843
+# **********************************************
+
+
+
+# g 306_19
+# t_voxel_features: 446.0
+# t_spatial_features: 118.0
+# t_rpn: 149.0
+# t_nms_func: 1.92
+# t_full_sample: 8.44, t_preprocess: 0.22, t_network: 4.67, t_predict: 3.33, t_anno: 0.33, t_rviz: 0.0
+# t_full_sample: 8.67, t_preprocess: 0.33, t_network: 4.67, t_predict: 3.33, t_anno: 0.56, t_rviz: 0.0
+# bev  AP:86.03, 86.03, 86.03
+# 3d   AP:81.65, 81.65, 81.65
+# aos  AP:48.40, 48.40, 48.40
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:79.61, 79.61, 79.61
+# 3d   AP:73.24, 73.24, 73.24
+# aos  AP:44.80, 44.80, 44.80
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:73.41, 73.41, 73.41
+# 3d   AP:49.39, 49.39, 49.39
+# aos  AP:41.79, 41.79, 41.79
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:54.00, 54.00, 54.00
+# 3d   AP:30.75, 30.75, 30.75
+# aos  AP:32.01, 32.01, 32.01
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:36.44, 36.44, 36.44
+# 3d   AP:17.46, 17.46, 17.46
+# aos  AP:22.05, 22.05, 22.05
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:18.84, 18.84, 18.84
+# 3d   AP:11.36, 11.36, 11.36
+# aos  AP:10.50, 10.50, 10.50
+# **********************************************
+# * score 45.095283407791875
+# **********************************************
+
+# final 339_34
+# bev  AP:91.15, 91.15, 91.15
+# 3d   AP:87.84, 87.84, 87.84
+# aos  AP:56.18, 56.18, 56.18
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:88.33, 88.33, 88.33
+# 3d   AP:84.47, 84.47, 84.47
+# aos  AP:54.46, 54.46, 54.46
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:84.33, 84.33, 84.33
+# 3d   AP:66.40, 66.40, 66.40
+# aos  AP:52.70, 52.70, 52.70
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:74.19, 74.19, 74.19
+# 3d   AP:38.83, 38.83, 38.83
+# aos  AP:45.65, 45.65, 45.65
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:58.57, 58.57, 58.57
+# 3d   AP:13.96, 13.96, 13.96
+# aos  AP:37.13, 37.13, 37.13
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:35.20, 35.20, 35.20
+# 3d   AP:5.96, 5.96, 5.96
+# aos  AP:21.78, 21.78, 21.78
+
+# **********************************************
+# * score 55.39571549623876
+# **********************************************
+
+# final h2 345_48
+# bev  AP:89.15, 89.15, 89.15
+# 3d   AP:88.40, 88.40, 88.40
+# aos  AP:65.62, 65.62, 65.62
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:88.34, 88.34, 88.34
+# 3d   AP:86.94, 86.94, 86.94
+# aos  AP:65.07, 65.07, 65.07
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:86.58, 86.58, 86.58
+# 3d   AP:71.66, 71.66, 71.66
+# aos  AP:63.90, 63.90, 63.90
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:74.34, 74.34, 74.34
+# 3d   AP:44.22, 44.22, 44.22
+# aos  AP:55.49, 55.49, 55.49
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:54.31, 54.31, 54.31
+# 3d   AP:22.44, 22.44, 22.44
+# aos  AP:41.28, 41.28, 41.28
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:27.94, 27.94, 27.94
+# 3d   AP:6.48, 6.48, 6.48
+# aos  AP:22.58, 22.58, 22.58
+# **********************************************
+# * score 58.596993187377656
+# **********************************************
+
+
+
+# h1 367 94
+# bev  AP:88.19, 88.19, 88.19
+# 3d   AP:86.58, 86.58, 86.58
+# aos  AP:46.91, 46.91, 46.91
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:87.30, 87.30, 87.30
+# 3d   AP:74.66, 74.66, 74.66
+# aos  AP:46.49, 46.49, 46.49
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:76.13, 76.13, 76.13
+# 3d   AP:62.19, 62.19, 62.19
+# aos  AP:40.99, 40.99, 40.99
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:63.91, 63.91, 63.91
+# 3d   AP:46.58, 46.58, 46.58
+# aos  AP:35.19, 35.19, 35.19
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:50.18, 50.18, 50.18
+# 3d   AP:28.69, 28.69, 28.69
+# aos  AP:28.07, 28.07, 28.07
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:31.35, 31.35, 31.35
+# 3d   AP:14.91, 14.91, 14.91
+# aos  AP:18.01, 18.01, 18.01
+
+# **********************************************
+# * score 51.46158893127947
+# **********************************************
+
+
+
+
+
+
+
+# 348 87 
+# Pedestrian AP@0.70, 0.50, 0.50:
+# bev  AP:93.29, 93.29, 93.29
+# 3d   AP:88.97, 88.97, 88.97
+# aos  AP:41.28, 41.28, 41.28
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:89.35, 89.35, 89.35
+# 3d   AP:86.00, 86.00, 86.00
+# aos  AP:39.66, 39.66, 39.66
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:87.97, 87.97, 87.97
+# 3d   AP:73.39, 73.39, 73.39
+# aos  AP:38.90, 38.90, 38.90
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:74.53, 74.53, 74.53
+# 3d   AP:50.41, 50.41, 50.41
+# aos  AP:33.88, 33.88, 33.88
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:63.69, 63.69, 63.69
+# 3d   AP:29.43, 29.43, 29.43
+# aos  AP:28.15, 28.15, 28.15
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:41.64, 41.64, 41.64
+# 3d   AP:13.78, 13.78, 13.78
+# aos  AP:18.71, 18.71, 18.71
+
+# **********************************************
+# * score 55.16848285470672
+# **********************************************
+# **********************************************
+# * Old Score: 54.77740469120927 New Score: 55.16848285470672
+# **********************************************
+
+#375 21
+# bev  AP:85.52, 85.52, 85.52
+# 3d   AP:83.37, 83.37, 83.37
+# aos  AP:43.10, 43.10, 43.10
+# Pedestrian AP@0.75, 0.55, 0.55:
+# bev  AP:82.64, 82.64, 82.64
+# 3d   AP:71.82, 71.82, 71.82
+# aos  AP:41.62, 41.62, 41.62
+# Pedestrian AP@0.80, 0.60, 0.60:
+# bev  AP:73.41, 73.41, 73.41
+# 3d   AP:50.40, 50.40, 50.40
+# aos  AP:37.09, 37.09, 37.09
+# Pedestrian AP@0.85, 0.65, 0.65:
+# bev  AP:60.05, 60.05, 60.05
+# 3d   AP:27.38, 27.38, 27.38
+# aos  AP:29.99, 29.99, 29.99
+# Pedestrian AP@0.90, 0.70, 0.70:
+# bev  AP:33.74, 33.74, 33.74
+# 3d   AP:17.47, 17.47, 17.47
+# aos  AP:15.76, 15.76, 15.76
+# Pedestrian AP@0.95, 0.75, 0.75:
+# bev  AP:19.52, 19.52, 19.52
+# 3d   AP:10.41, 10.41, 10.41
+# aos  AP:8.48, 8.48, 8.48
+# **********************************************
+# * score 43.986375949683456
+# **********************************************
+

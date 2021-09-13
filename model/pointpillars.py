@@ -204,7 +204,7 @@ class PillarFeatureNet(tf.keras.Model):
 
         # ------------------------------------------------------------------------------------------------------
         # Apply PillarFeatureNet
-        # voxels: [voxels, point, point voxels]
+        # voxels: [voxels, point, point features]
         # return: [voxels, point, filters]
         # ------------------------------------------------------------------------------------------------------
 

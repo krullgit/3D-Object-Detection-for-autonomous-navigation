@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: latin-1
 
+from random import random
 import rospy
 from std_msgs.msg import String
 from sensor_msgs.msg import PointCloud, Image
@@ -14,6 +15,7 @@ from scipy.spatial.transform import Rotation as R
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
+import random
 
 
 ##### 3DOD
@@ -22,6 +24,9 @@ import numpy as np
 import math
 import cv2
 ##### 3DOD
+
+import matplotlib.pyplot as plt
+
 
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -74,8 +79,12 @@ def send_3d_bbox(centers, dims, angles, publisher, header):
         # ------------------------------------------------------------------------------------------------------
         # cerate 3D box
         # ------------------------------------------------------------------------------------------------------
+        
 
         box_pred = BoundingBox()  
+        # conf = random.randint(0, 100)/100.0
+        # print(conf)   
+        # box_pred.value = conf
         box_pred.header.stamp = rospy.Time.now()
         box_pred.header.frame_id = "camera_color_frame"
         box_pred.pose.position.x = pred_x
@@ -292,7 +301,8 @@ def sendToRVIZ():
     rospy.sleep(0.1)
     counter = 0
     counter_ini = counter
-    prediction_min_score = 0.3
+    prediction_min_score = 0.45
+    kitti_infos = None
 
     # ------------------------------------------------------------------------------------------------------
     # set parameter
@@ -319,7 +329,7 @@ def sendToRVIZ():
         show_annotations = False
     if mode == "testing_sampled":
         # load gt
-        with open("/home/makr/Documents/data/pedestrian_3d_own/1/object/kitti_infos_val_sampled.pkl", "rb") as file: 
+        with open("/home/makr/Documents/data/pedestrian_3d_own/1/object/back3/kitti_infos_val_sampled.pkl", "rb") as file: 
             kitti_infos = pickle.load(file)
         # load annos
         # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_377/out_dir_eval_results/result_epoch_22.pkl", "rb") as file: 
@@ -346,8 +356,18 @@ def sendToRVIZ():
         #    thesis_eval_dict = pickle.load(file)
         with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_108/out_dir_eval_results/result_epoch_3.pkl", "rb") as file: 
            thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_146/out_dir_eval_results/result_epoch_5.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_156/out_dir_eval_results/result_epoch_2.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_232/out_dir_eval_results/result_epoch_16.pkl", "rb") as file: 
+        #    thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_345/out_dir_eval_results/result_epoch_48.pkl", "rb") as file: 
+           thesis_eval_dict = pickle.load(file)
+        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_367/out_dir_eval_results/result_epoch_94.pkl", "rb") as file: 
+        #    thesis_eval_dict = pickle.load(file)
         # load point clouds
-        point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/testing/velodyne" # TESTING SAMPLED/UNSAMPLED DATA (depending on what you copy into the folder)
+        point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/testing/back3/velodyne" # TESTING SAMPLED/UNSAMPLED DATA (depending on what you copy into the folder)
         show_annotations = True
         show_ground_truth = True
     if mode == "training_unsampled":
@@ -388,8 +408,8 @@ def sendToRVIZ():
         #     thesis_eval_dict = pickle.load(file)
         with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_496/out_dir_eval_results/result.pkl", "rb") as file:
             thesis_eval_dict = pickle.load(file)
-        # with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_496/out_dir_eval_results/result_e21_ve5_2.pkl", "rb") as file:
-        #     thesis_eval_dict = pickle.load(file)
+        with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_496/out_dir_eval_results/result_e21_ve5_2.pkl", "rb") as file:
+            thesis_eval_dict = pickle.load(file)
         # # load point clouds
         point_cloud_path = "/home/makr/Documents/data/pedestrian_3d_own/1/object/testing_live/velodyne"
         show_ground_truth = False # to false since we dont have annos for live data
@@ -412,6 +432,7 @@ def sendToRVIZ():
 
         # load point clouds
         point_cloud_path = "/home/makr/Desktop/temp/pedestrian_3d_own/1/object/gt_database"
+        point_cloud_path =  "/home/makr/Documents/data/kitti/compressed/testing_velo"
         show_annotations = False
         show_ground_truth = False
 
@@ -419,16 +440,23 @@ def sendToRVIZ():
     # load pointclouds from folder and order numerically
     # ------------------------------------------------------------------------------------------------------
 
+    filetypeCustom = ".pkl"
+    filetypeKitti = ".bin"
+    filetype = filetypeCustom
     import os
     velodyne_data = []
     for root, dirs, files in os.walk(point_cloud_path, topdown=False):
         files = [x[:-4] for x in files] # cut the .png
         for name in sorted(files): # order the list // !!!!! every 10s elements is out of order since 
-            name = name + ".pkl" # append .png again
+            name = name + filetype # append .png again
             file = os.path.join(root, name)
-            with open(file, 'rb') as file:
-                velodyne_data.append(pickle.load(file, encoding="latin1"))
-
+            if filetype == ".pkl":
+                with open(file, 'rb') as file:
+                    velodyne_data.append(pickle.load(file, encoding="latin1"))
+            else:
+                points = np.fromfile(file, dtype=np.float32, count=-1).reshape([-1, 4])
+                velodyne_data.append(points[...,:3])
+    
     # ------------------------------------------------------------------------------------------------------
     # iterate over the pointcloud files
     # ------------------------------------------------------------------------------------------------------
@@ -436,14 +464,24 @@ def sendToRVIZ():
     
     print(counter)
     assert(len(velodyne_data)>0)
+    
+    detection_annos = []
+    confidences_array = []
+    
+    input("Press Enter to continue...")
+    print(counter)
+    
     while not rospy.is_shutdown() and counter < len(velodyne_data):
 
         rospy.sleep(0.0)
+        
+        
 
         try:
-            input("Press Enter to continue...")
             
-            print(counter)
+            # input("Press Enter to continue...")
+            # print(counter)
+            
             point_cloud = velodyne_data[counter]
 
             # ------------------------------------------------------------------------------------------------------
@@ -494,25 +532,56 @@ def sendToRVIZ():
             # ------------------------------------------------------------------------------------------------------
             # Create and Publish Annos
             # ------------------------------------------------------------------------------------------------------
-# 247
+
             if show_annotations:
                 annotations = thesis_eval_dict[counter]
                 detection_anno = remove_low_score(annotations, prediction_min_score)
                 if len(detection_anno["score"]) > 0:
-                    print(detection_anno["score"])
+                    detection_annos.append(detection_anno["score"][0])
+                    print("score: {} Avg: {}".format(str(detection_anno["score"]),str(sum(detection_annos)/len(detection_annos))))
                 centers,dims,angles= kitti_anno_to_corners(calib, detection_anno) # [a,b,c] -> [c,a,b] (camera to lidar coords)
                 #centers = centers + [0.0,0.0,1.9]   # Epoch 2
                 #centers = centers + [0.0,0.0,2.3]      #Epoch 3            
                 #centers = centers + [0.0,0.0,2.4] # live
-                centers = centers + [0.0,0.0,1.0] # live # TODO: müsste eigentlich um höhe/2 angehoben werden weil Pointpillars die z position am boden angibt der bbox und rviz die z mitte der höhe der bbox
+                centers = centers + [0.0,0.0,0.9] # live # TODO: müsste eigentlich um höhe/2 angehoben werden weil Pointpillars die z position am boden angibt der bbox und rviz die z mitte der höhe der bbox
                 send_3d_bbox(centers, dims, angles, bb_pred_guess_1_pub, header)      
-
+                
             if(counter%100==0):
                 print(counter)
 
             counter = counter +1
-            if counter >= len(kitti_infos)-1:
-                counter = 0
+            
+            make_histo_of_confidences = False
+            if make_histo_of_confidences:
+                for score in detection_anno["score"]:
+                    confidences_array.append(score)
+                if counter >= len(kitti_infos)-1:
+                    range = (0, 1.0)
+                    bins = 10  
+                    
+                    # plotting a histogram
+                    plt.hist(confidences_array, bins, range, color = 'green',
+                            histtype = 'bar', rwidth = 0.8)
+                    
+                    x1,x2,y1,y2 = plt.axis()  
+                    plt.axis((x1,x2,0,100))
+                    
+                    # x-axis label
+                    plt.xlabel('conf')
+                    # frequency label
+                    plt.ylabel('score')
+                    # plot title
+                    plt.title('My histogram')
+                    
+                    # function to show the plot
+                    plt.show()
+            
+            
+            
+            
+            if kitti_infos is not None:
+                if counter >= len(kitti_infos)-1:
+                    counter = 0
             
         except IOError as e:
             pass

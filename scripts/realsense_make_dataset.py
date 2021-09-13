@@ -473,77 +473,7 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
                     file.write("")
                     
                     
-     # this listener saves point clouds with calib and annotations
-    # =========================================
-    def callback_real_annotation_record(self, data):
-
-        print("Current ID: {}".format(str(self.image_counter)))
-         # increase image_counter
-        self.image_counter += 1
-
-        # ------------------------------------------------------------------------------------------------------
-        # if we reached the number of point clouds we wanted to save: exit
-        # ------------------------------------------------------------------------------------------------------
-
-        # if self.start_idx > self.end_idx:
-        #     import sys
-        #     print("DONE")
-        #     sys.exit()
-
-        # ------------------------------------------------------------------------------------------------------
-        # if we did not reach the image ID when we want to start saving: skip
-        # ------------------------------------------------------------------------------------------------------
-
-        # if self.image_counter <= self.start_idx:
-        #     return None
-
-        if self.image_counter % self.save_every_x_step == 0:
-            
-            # ------------------------------------------------------------------------------------------------------
-            # print how many point clouds we have saved already
-            # ------------------------------------------------------------------------------------------------------
-
-
-            print("Current ID Naming: {}".format(str(self.start_idx)))
-
-            # ------------------------------------------------------------------------------------------------------
-            # convert pountcloud format form sensor to array
-            # ------------------------------------------------------------------------------------------------------
-
-            #pc = np.array([pc2_to_xyzrgb(pp) for pp in pc2.read_points(data, skip_nans=True, field_names=("x", "y", "z","rgb"))])
-            pc = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(data)
-
-            # ------------------------------------------------------------------------------------------------------
-            #take every 4 points to reduce data
-            # ------------------------------------------------------------------------------------------------------
-
-            #pc = pc[1::4]
-            pc = pc[1::4] # the rosbag has more points for some reason
-
-            # ------------------------------------------------------------------------------------------------------
-            # Rotate to get to Kitti coords
-            # ------------------------------------------------------------------------------------------------------
-
-            r = R.from_euler('y', -90, degrees=True).as_dcm()
-            r2 = R.from_euler('x', 90, degrees=True).as_dcm()
-            pc = np.dot(pc,r)
-            pc = np.dot(pc,r2)
-
-            # ------------------------------------------------------------------------------------------------------
-            # save point cloud
-            # ------------------------------------------------------------------------------------------------------
-
-            # we create leading zeros of the index to match the filenames of the dataset
-            image_counter_leading_zeros = "%06d" % (int(self.start_idx),) 
-            self.start_idx += 1
-            if self.mode == "train":
-                filepath_pc = self.dataset_root_path + "training/" + "velodyne/" + str(image_counter_leading_zeros) + ".pkl"
-            elif self.mode == "test":
-                filepath_pc = self.dataset_root_path + "testing_real_anno/" + "velodyne/" + str(image_counter_leading_zeros) + ".pkl"
-            # lift z axis to match the ground at 0 (realsense sensor was 1 meter above the ground while recording, so ground is at -1)
-            pc = np.array(pc) + [0.0,0.0,1.0]
-            with open(filepath_pc, 'wb') as file:
-                pickle.dump(np.array(pc), file, 2)
+    
 
     
 
@@ -612,11 +542,84 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
                     print("DONE")
                     sys.exit()
         
-     
+    
+    # this listener saves point clouds with calib and annotations
+    # =========================================
+    def callback_real_annotation_record(self, data):
+
+        print("Current ID: {}".format(str(self.image_counter)))
+         # increase image_counter
+        self.image_counter += 1
+
+        # ------------------------------------------------------------------------------------------------------
+        # if we reached the number of point clouds we wanted to save: exit
+        # ------------------------------------------------------------------------------------------------------
+
+        # if self.start_idx > self.end_idx:
+        #     import sys
+        #     print("DONE")
+        #     sys.exit()
+
+        # ------------------------------------------------------------------------------------------------------
+        # if we did not reach the image ID when we want to start saving: skip
+        # ------------------------------------------------------------------------------------------------------
+
+        # if self.image_counter <= self.start_idx:
+        #     return None
+
+        if self.image_counter % self.save_every_x_step == 0:
+            
+            # ------------------------------------------------------------------------------------------------------
+            # print how many point clouds we have saved already
+            # ------------------------------------------------------------------------------------------------------
+
+
+            print("Current ID Naming: {}".format(str(self.start_idx)))
+
+            # ------------------------------------------------------------------------------------------------------
+            # convert pountcloud format form sensor to array
+            # ------------------------------------------------------------------------------------------------------
+
+            #pc = np.array([pc2_to_xyzrgb(pp) for pp in pc2.read_points(data, skip_nans=True, field_names=("x", "y", "z","rgb"))])
+            pc = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(data)
+
+            # ------------------------------------------------------------------------------------------------------
+            #take every 4 points to reduce data
+            # ------------------------------------------------------------------------------------------------------
+
+            #pc = pc[1::4]
+            pc = pc[1::4] # the rosbag has more points for some reason
+
+            # ------------------------------------------------------------------------------------------------------
+            # Rotate to get to Kitti coords
+            # ------------------------------------------------------------------------------------------------------
+
+            r = R.from_euler('y', -90, degrees=True).as_dcm()
+            r2 = R.from_euler('x', 90, degrees=True).as_dcm()
+            pc = np.dot(pc,r)
+            pc = np.dot(pc,r2)
+
+            # ------------------------------------------------------------------------------------------------------
+            # save point cloud
+            # ------------------------------------------------------------------------------------------------------
+
+            # we create leading zeros of the index to match the filenames of the dataset
+            image_counter_leading_zeros = "%06d" % (int(self.start_idx),) 
+            self.start_idx += 1
+            if self.mode == "train":
+                filepath_pc = self.dataset_root_path + "training/" + "velodyne/" + str(image_counter_leading_zeros) + ".pkl"
+            elif self.mode == "test":
+                filepath_pc = self.dataset_root_path + "testing/back3/" + "velodyne/" + str(image_counter_leading_zeros) + ".pkl"
+            # lift z axis to match the ground at 0 (realsense sensor was 1 meter above the ground while recording, so ground is at -1)
+            pc = np.array(pc) + [0.0,0.0,1.0]
+            with open(filepath_pc, 'wb') as file:
+                pickle.dump(np.array(pc), file, 2)
+        
+        
         
 # this listener saves point clouds with calib and annotations
 # =========================================
-def callback_real_annotation_anno(dataset_root_path, train_or_test):
+def callback_real_annotation_anno(dataset_root_path, train_or_test,start_idx=0):
     
     point_cloud_pub = rospy.Publisher('/debug_points', PointCloud2)
     bb_pub = rospy.Publisher("/debug_load_data_bb", BoundingBoxArray)
@@ -633,7 +636,7 @@ def callback_real_annotation_anno(dataset_root_path, train_or_test):
     if train_or_test == "train":
         filepath_pc = dataset_root_path + "training/" + "velodyne/"
     elif train_or_test == "test":
-        filepath_pc = dataset_root_path + "testing/" + "velodyne/"
+        filepath_pc = dataset_root_path + "testing/back3/" + "velodyne/"
     
     
     
@@ -659,7 +662,7 @@ def callback_real_annotation_anno(dataset_root_path, train_or_test):
             ]
     
     assert(len(velodyne_data)>0)
-    counter = 0
+    counter = start_idx
     
     # ------------------------------------------------------------------------------------------------------
     # save Calibration
@@ -721,8 +724,8 @@ Tr_imu_to_velo: 9.999976000000e-01 7.553071000000e-04 -2.035826000000e-03 -8.086
             filepath_calibration = dataset_root_path + "training/" + "calib/" + str(names_indices[counter]) + ".txt"
             filepath_annoation = dataset_root_path + "training/" + "label_2/" + str(names_indices[counter]) + ".txt"
         elif train_or_test == "test":
-            filepath_calibration = dataset_root_path + "testing/" + "calib/" + str(names_indices[counter]) + ".txt"
-            filepath_annoation = dataset_root_path + "testing/" + "label_2/" + str(names_indices[counter]) + ".txt"
+            filepath_calibration = dataset_root_path + "testing/back3/" + "calib/" + str(names_indices[counter]) + ".txt"
+            filepath_annoation = dataset_root_path + "testing/back3/" + "label_2/" + str(names_indices[counter]) + ".txt"
 
         
         
@@ -842,7 +845,7 @@ if __name__ == '__main__':
             start_idx = int(sys.argv[3])
             end_idx = int(sys.argv[4])
             train_or_test = sys.argv[5]
-            callback_real_annotation_anno(dataset_root_path,train_or_test)
+            callback_real_annotation_anno(dataset_root_path,train_or_test,start_idx)
             sys.exit()
             
         listener = listener(dataset_root_path=dataset_root_path, 

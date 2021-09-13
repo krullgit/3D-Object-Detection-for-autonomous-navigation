@@ -156,7 +156,7 @@ def create_kitti_info_file(data_path,
                            relative_path=True):
 
     
-    train_img_ids = list(range(0,4340)) # indices of training images that will appear in the info file
+    train_img_ids = list(range(0,4440)) # indices of training images that will appear in the info file
     val_img_ids = list(range(0,1200)) # indices of test images that will appear in the info file
     # trainval_img_ids = list(range(0,7480)) # only kitti
     # test_img_ids = list(range(0,7517)) # only kitti
@@ -167,7 +167,7 @@ def create_kitti_info_file(data_path,
     else:
         save_path = pathlib.Path(save_path)
         
-    mode = "test" # option: train, test, test_real
+    mode = "train" # option: train, test, test_real
 
     # ------------------------------------------------------------------------------------------------------ 
     #  Train
@@ -198,7 +198,7 @@ def create_kitti_info_file(data_path,
     # ------------------------------------------------------------------------------------------------------
 
     if mode == "test":
-        val_img_ids = list(range(0,120)) # indices of test images that will appear in the info file
+        val_img_ids = list(range(0,360)) # indices of test images that will appear in the info file
         kitti_infos_val = kitti.get_kitti_image_info(
             data_path,
             training=False,

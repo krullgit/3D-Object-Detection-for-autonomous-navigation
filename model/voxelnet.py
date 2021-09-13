@@ -573,15 +573,15 @@ class RPN(tf.keras.Model):
         self.block1 = tf.keras.Sequential(name="block1")
         self.block1.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
         # self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3,strides=layer_strides[0], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
-        self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3, trainable=True,strides=layer_strides[0], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
+        self.block1.add(tf.keras.layers.SeparableConv2D(num_filters[0],kernel_size=3, trainable=True,strides=layer_strides[0], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
         self.block1.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.block1.add(tf.keras.layers.ReLU())
         # self.block1.add(Dropout(0.4))
 
         for i in range(layer_nums[0]):
             #self.block1.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
-            # self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
-            self.block1.add(tf.keras.layers.Conv2D(num_filters[0],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
+            # self.block1.add(tf.keras.layers.SeparableConv2D(num_filters[0],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
+            self.block1.add(tf.keras.layers.SeparableConv2D(num_filters[0],kernel_size=3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
             self.block1.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
             self.block1.add(tf.keras.layers.ReLU())
         # self.block1.add(Dropout(0.4))
@@ -603,16 +603,16 @@ class RPN(tf.keras.Model):
 
         self.block2 = tf.keras.Sequential(name="block2")
         self.block2.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
-        # self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,strides=layer_strides[1], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
-        self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,strides=layer_strides[1], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
+        # self.block2.add(tf.keras.layers.SeparableConv2D(num_filters[1],3,strides=layer_strides[1], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
+        self.block2.add(tf.keras.layers.SeparableConv2D(num_filters[1],kernel_size=3,strides=layer_strides[1], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
         self.block2.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.block2.add(tf.keras.layers.ReLU())
         # self.block2.add(Dropout(0.4))
 
         for i in range(layer_nums[1]):
             #self.block2.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
-            # self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
-            self.block2.add(tf.keras.layers.Conv2D(num_filters[1],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
+            # self.block2.add(tf.keras.layers.SeparableConv2D(num_filters[1],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
+            self.block2.add(tf.keras.layers.SeparableConv2D(num_filters[1],kernel_size=3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
             self.block2.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
             self.block2.add(tf.keras.layers.ReLU())
         # self.block2.add(Dropout(0.4))
@@ -634,16 +634,16 @@ class RPN(tf.keras.Model):
 
         self.block3 = tf.keras.Sequential(name="block3")
         self.block3.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
-        # self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,strides=layer_strides[2], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
-        self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,strides=layer_strides[2], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
+        # self.block3.add(tf.keras.layers.SeparableConv2D(num_filters[2],3,strides=layer_strides[2], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None), kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
+        self.block3.add(tf.keras.layers.SeparableConv2D(num_filters[2],kernel_size=3,strides=layer_strides[2], use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None)))
         self.block3.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
         self.block3.add(tf.keras.layers.ReLU())
         # self.block3.add(Dropout(0.4))
 
         for i in range(layer_nums[2]):
             #self.block3.add(tf.keras.layers.ZeroPadding2D(padding=((1,1),(1,1))))
-            # self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
-            self.block3.add(tf.keras.layers.Conv2D(num_filters[2],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
+            # self.block3.add(tf.keras.layers.SeparableConv2D(num_filters[2],3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same", kernel_regularizer=regularizers.l2(l=0.01),kernel_constraint=UnitNorm()))
+            self.block3.add(tf.keras.layers.SeparableConv2D(num_filters[2],kernel_size=3,use_bias=use_bias_Conv2d, kernel_initializer=keras.initializers.he_uniform(seed=None),padding="same"))
             self.block3.add(tf.keras.layers.BatchNormalization(axis=-1, trainable=True))
             self.block3.add(tf.keras.layers.ReLU())
         # self.block3.add(Dropout(0.4))
@@ -1190,30 +1190,28 @@ class VoxelNet(tf.keras.Model):
                 # I replaced it with the succeeding paragraph 
                 # ------------------------------------------------------------------------------------------------------
 
-                # if self.nms_score_threshold > 0.0: # (here false) # TODO convert to numpy 
-                #     thresh = tf.constant(
-                #         [self.config["model"]["second"]["nms_score_threshold"]],
-                #         dtype=total_scores.dtype)
-                #     top_scores_keep = (top_scores >= thresh)
-                #     top_scores = tf.boolean_mask(top_scores,top_scores_keep)
-                #     box_preds = box_preds[top_scores_keep]
-                #     if self.config["model"]["second"]["use_direction_classifier"]:
-                #         dir_labels = dir_labels[top_scores_keep]
-                #     top_labels = top_labels[top_scores_keep]
+                if self.nms_score_threshold > 0.0: # (here false) # TODO convert to numpy 
+                    thresh = self.config["model"]["second"]["nms_score_threshold"]
+                    top_scores_keep = np.array(top_scores) >= thresh
+                    top_scores = top_scores[top_scores_keep]
+                    box_preds = box_preds[top_scores_keep]
+                    anchors = anchors[top_scores_keep]
+                    if self.config["model"]["second"]["use_direction_classifier"]:
+                        dir_labels = dir_labels[top_scores_keep]
+                    top_labels = top_labels[top_scores_keep]
 
                 # ------------------------------------------------------------------------------------------------------
                 # only keep the top n score predictions
-                # TODO why Im doin this again? wouldnt it be better to filter as much as possible?
                 # ------------------------------------------------------------------------------------------------------
 
                 top_n_scores = np.argpartition(top_scores, -np.minimum(len(top_scores),100))[-np.minimum(len(top_scores),100):]
                 
-                top_scores = top_scores[[top_n_scores]]
-                box_preds = box_preds[[top_n_scores]]
-                anchors = anchors[[top_n_scores]]
+                top_scores = top_scores[[top_n_scores]]#(5218,)
+                box_preds = box_preds[[top_n_scores]]#(5218, 7)
+                anchors = anchors[[top_n_scores]]#(5218, 7)
                 if self.use_direction_classifier:
-                    dir_labels = dir_labels[[top_n_scores]]
-                top_labels = top_labels[[top_n_scores]]
+                    dir_labels = dir_labels[[top_n_scores]]#(5218,)
+                top_labels = top_labels[[top_n_scores]]#(5218,)
 
                 # ------------------------------------------------------------------------------------------------------
                 # If there are top_scores left

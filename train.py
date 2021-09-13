@@ -79,6 +79,8 @@ def set_trainable(net, trainable):
     net.layers[3].layers[0].layers[8].trainable = trainable
     net.layers[3].layers[0].layers[9].trainable = trainable
     
+    # net.layers[3].layers[0].layers[10].trainable = trainable
+    
     net.layers[3].layers[2].layers[0].trainable = trainable
     net.layers[3].layers[2].layers[1].trainable = trainable
     net.layers[3].layers[2].layers[2].trainable = trainable
@@ -90,6 +92,9 @@ def set_trainable(net, trainable):
     net.layers[3].layers[2].layers[8].trainable = trainable
     net.layers[3].layers[2].layers[9].trainable = trainable
     
+    # net.layers[3].layers[2].layers[10].trainable = trainable
+    # net.layers[3].layers[2].layers[11].trainable = trainable
+    
     net.layers[3].layers[4].layers[0].trainable = trainable
     net.layers[3].layers[4].layers[1].trainable = trainable
     net.layers[3].layers[4].layers[2].trainable = trainable
@@ -100,6 +105,10 @@ def set_trainable(net, trainable):
     net.layers[3].layers[4].layers[7].trainable = trainable
     net.layers[3].layers[4].layers[8].trainable = trainable
     net.layers[3].layers[4].layers[9].trainable = trainable
+    
+    # net.layers[3].layers[4].layers[10].trainable = trainable
+    # net.layers[3].layers[4].layers[11].trainable = trainable
+    # net.layers[3].layers[4].layers[12].trainable = trainable
     
     return net
 
@@ -228,6 +237,11 @@ def train(config_path):
                 weight_decay =          config["train_config"]["optimizer"]["adam_optimizer"]["weight_decay"],
                 epsilon=                1e-08
                 )
+            
+            # optimizer = tf.keras.optimizers.RMSprop(
+            #     learning_rate=lr_schedule, rho=0.9, momentum=0.0, epsilon=1e-07, centered=False,
+            #     name='RMSprop'
+            # )
     
     # DEBUG PARAMS
     log_weights_and_bias = True
@@ -270,13 +284,13 @@ def train(config_path):
             cared = ret_dict["cared"] 
  
         #Compute gradients
-        gradients = g.gradient(loss, net.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.NONE) 
+        gradients = g.gradient(loss, net.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.NONE)
         
         # ------------------------------------------------------------------------------------------------------
         #  Apply Gradient Clipping to avoid exploding Gradients
         # ------------------------------------------------------------------------------------------------------
 
-        #gradients = [tf.clip_by_value(grad, -0.1, +0.1) for grad in gradients]
+        # gradients = [tf.clip_by_value(grad, -0.1, +0.1) for grad in gradients]
         # gradients = [tf.clip_by_norm(grad, 1) for grad in gradients]
         
         # ------------------------------------------------------------------------------------------------------
@@ -344,10 +358,10 @@ def train(config_path):
                 load_weights_finished = True
                 
                 # load weights
-                net.load_weights("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_102/out_dir_checkpoints/model_weights_21.h5")
+                net.load_weights("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_322/out_dir_checkpoints/model_weights_18.h5")
 
                 # load optimizer
-                with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_102/out_dir_checkpoints/optimizer_weights_21.h5", "rb") as file: optimizer.set_weights(pickle.load(file))
+                with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_322/out_dir_checkpoints/optimizer_weights_18.h5", "rb") as file: optimizer.set_weights(pickle.load(file))
 
                 # freeze layer for transfer learning
                 set_trainable(net, False)
@@ -383,8 +397,10 @@ def train(config_path):
         # ------------------------------------------------------------------------------------------------------
         # Save Model Weights and Optimizer Weights (Checkpoint)
         # ------------------------------------------------------------------------------------------------------ 
-
-        if do_evaluate:
+        
+        startEvalFromEpoch = 0
+        
+        if do_evaluate and epoch_idx >= startEvalFromEpoch:
 
             # save weights temporarily to check first the eval
             if load_weights: set_trainable(net, True)
@@ -431,155 +447,22 @@ def train(config_path):
         # DEBUG: always save weights, no matter if good or not
         # ------------------------------------------------------------------------------------------------------
         
-        if load_weights: set_trainable(net, True)
-        # save Optimizer weights TODO
-        with open(out_dir_checkpoints+"/optimizer_weights_{}.h5".format(str(epoch_idx)), "wb") as file: 
-            pickle.dump(optimizer.get_weights(), file)
-            
-        # just save the last model indepeneding of its performance out of curiosity
-        net.save_weights(out_dir_checkpoints+"/model_weights_{}.h5".format(str(epoch_idx)))
-        if load_weights: set_trainable(net, False)
+        saveWeights_always = False
+        
+        if saveWeights_always:
+            if load_weights: set_trainable(net, True)
+            # save Optimizer weights TODO
+            with open(out_dir_checkpoints+"/optimizer_weights_{}.h5".format(str(epoch_idx)), "wb") as file: 
+                pickle.dump(optimizer.get_weights(), file)
+                
+            # just save the last model indepeneding of its performance out of curiosity
+            net.save_weights(out_dir_checkpoints+"/model_weights_{}.h5".format(str(epoch_idx)))
+            if load_weights: set_trainable(net, False)
 
 
 
-# avg forward time per example: 0.160
-# avg postprocess time per example: 0.011
 
 
-# old data
-# Pedestrian AP@0.50, 0.50, 0.50:
-# bbox AP:0.01, 0.01, 0.01
-# bev  AP:52.74, 52.74, 52.74
-# 3d   AP:29.79, 29.79, 29.79
-# aos  AP:0.01, 0.01, 0.01
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bbox AP:0.01, 0.01, 0.01
-# bev  AP:84.13, 84.13, 84.13
-# 3d   AP:83.41, 83.41, 83.41
-# aos  AP:0.01, 0.01, 0.01
-
-# Pedestrian coco AP@0.25:0.05:0.70:
-# bbox AP:0.35, 0.35, 0.35
-# bev  AP:52.32, 52.32, 52.32
-# 3d   AP:40.27, 40.27, 40.27
-# aos  AP:0.20, 0.20, 0.20
-
-
-# new data batcg_s 4
-# Pedestrian AP@0.50, 0.50, 0.50:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:77.83, 77.83, 77.83
-# 3d   AP:59.23, 59.23, 59.23
-# aos  AP:0.00, 0.00, 0.00
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:89.45, 89.45, 89.45
-# 3d   AP:89.43, 89.43, 89.43
-# aos  AP:0.00, 0.00, 0.00
-
-# Pedestrian coco AP@0.25:0.05:0.70:
-# bbox AP:0.04, 0.04, 0.04
-# bev  AP:66.65, 66.65, 66.65
-# 3d   AP:57.23, 57.23, 57.23
-# aos  AP:0.02, 0.02, 0.02
-
-# new data batch_s 2
-# Pedestrian AP@0.50, 0.50, 0.50:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:77.04, 77.04, 77.04
-# 3d   AP:38.31, 38.31, 38.31
-# aos  AP:0.00, 0.00, 0.00
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:88.86, 88.86, 88.86
-# 3d   AP:88.83, 88.83, 88.83
-# aos  AP:0.00, 0.00, 0.00
-
-# Pedestrian coco AP@0.25:0.05:0.70:
-# bbox AP:0.01, 0.01, 0.01
-# bev  AP:62.16, 62.16, 62.16
-# 3d   AP:47.56, 47.56, 47.56
-# aos  AP:0.01, 0.01, 0.01
-
-
-# Pedestrian AP@0.50, 0.50, 0.50:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:77.08, 77.08, 77.08
-# 3d   AP:10.89, 10.89, 10.89
-# aos  AP:0.00, 0.00, 0.00
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:90.05, 90.05, 90.05
-# 3d   AP:82.20, 82.20, 82.20
-# aos  AP:0.00, 0.00, 0.00
-
-# Pedestrian coco AP@0.25:0.05:0.70:
-# bbox AP:1.09, 1.09, 1.09
-# bev  AP:62.58, 62.58, 62.58
-# 3d   AP:26.49, 26.49, 26.49
-# aos  AP:0.66, 0.66, 0.66
-
-
-# Pedestrian AP@0.50, 0.50, 0.50:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:79.00, 79.00, 79.00
-# 3d   AP:63.81, 63.81, 63.81
-# aos  AP:0.00, 0.00, 0.00
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bbox AP:0.00, 0.00, 0.00
-# bev  AP:89.90, 89.90, 89.90
-# 3d   AP:89.90, 89.90, 89.90
-# aos  AP:0.00, 0.00, 0.00
-
-# Pedestrian coco AP@0.25:0.05:0.70:
-# bbox AP:0.01, 0.01, 0.01
-# bev  AP:69.27, 69.27, 69.27
-# 3d   AP:59.02, 59.02, 59.02
-# aos  AP:0.01, 0.01, 0.01
-
-
-# Pedestrian AP@0.50, 0.50, 0.50:
-# bev  AP:63.70, 63.70, 63.70
-# 3d   AP:37.41, 37.41, 37.41
-# aos  AP:38.73, 38.73, 38.73
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bev  AP:95.29, 95.29, 95.29
-# 3d   AP:89.91, 89.91, 89.91
-# aos  AP:54.50, 54.50, 54.50
-
-
-# bev  AP:79.17, 79.17, 79.17
-# 3d   AP:41.01, 41.01, 41.01
-# aos  AP:53.68, 53.68, 53.68
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bev  AP:93.63, 93.63, 93.63
-# 3d   AP:93.63, 93.63, 93.63
-# aos  AP:63.87, 63.87, 63.87
-
-# Pedestrian AP@0.50, 0.50, 0.50:
-# bev  AP:82.75, 82.75, 82.75
-# 3d   AP:48.25, 48.25, 48.25
-# aos  AP:40.66, 40.66, 40.66
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bev  AP:95.54, 95.54, 95.54
-# 3d   AP:95.51, 95.51, 95.51
-# aos  AP:46.76, 46.76, 46.76
-
-# bev  AP:85.91, 85.91, 85.91
-# 3d   AP:63.61, 63.61, 63.61
-# aos  AP:53.01, 53.01, 53.01
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bev  AP:93.62, 93.62, 93.62
-# 3d   AP:93.58, 93.58, 93.58
-# aos  AP:57.33, 57.33, 57.33
-
-# bev  AP:88.29, 88.29, 88.29
-# 3d   AP:67.61, 67.61, 67.61
-# aos  AP:68.34, 68.34, 68.34
-# Pedestrian AP@0.50, 0.25, 0.25:
-# bev  AP:94.25, 94.25, 94.25
-# 3d   AP:94.25, 94.25, 94.25
-# aos  AP:72.95, 72.95, 72.95
 
 
 #  ███████╗    ██╗   ██╗     █████╗     ██╗     
@@ -662,6 +545,10 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     no_annos_mode = config["eval_input_reader"]["no_annos_mode"]
     prediction_min_score = config["prediction_min_score"]
     load_weights = config["load_weights"]
+    point_cloud_range = np.array(config["model"]["second"]["voxel_generator"]["point_cloud_range"])
+    voxel_size = np.array(config["model"]["second"]["voxel_generator"]["voxel_size"])
+    feature_map_size = config["eval_input_reader"]["feature_map_size"]
+    
 
 
     # create the dataLoader object which is reponsible for loading datapoints
@@ -756,7 +643,37 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     # ROS setup, in case the prediction should be sent to rviz
     # ------------------------------------------------------------------------------------------------------
     
-    if production_mode:
+    printConfidenceMap = True # also set debug_save_points in train.yaml to True
+    if printConfidenceMap:
+        bb_pub_confidenceMap = rospy.Publisher("bb_pub_confidenceMap", BoundingBoxArray)
+        header = std_msgs.msg.Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = 'camera_color_frame'
+        
+        # 64 x 80
+        coordinates = []
+        for i in range(feature_map_size[1]):
+            for j in range(feature_map_size[2]):
+                coordinates.append([i,j])
+        coordinates = np.array(coordinates)
+        
+        grid_size = (point_cloud_range[3:] - point_cloud_range[:3]) / voxel_size
+        grid_size = np.round(grid_size, 0, grid_size).astype(np.int32)
+        pillar_coords = coordinates[:,:]*voxel_size[:2] 
+        pillar_coords = pillar_coords[:,[1,0]] # swap x and y axis
+        pillar_coords = np.concatenate((pillar_coords,np.zeros(shape=(len(coordinates),1))), axis=1) # add z axis
+        pillar_coords =  pillar_coords+(point_cloud_range[0],point_cloud_range[1],0)# distribute pillars over real sized field
+    
+        pillar_boxes = np.concatenate((pillar_coords,np.zeros(shape=(len(coordinates),1))+voxel_size[0]), axis=1) # add width axis
+        pillar_boxes = np.concatenate((pillar_boxes,np.zeros(shape=(len(coordinates),1))+voxel_size[1]), axis=1) # add length axis
+        pillar_boxes = np.concatenate((pillar_boxes,np.zeros(shape=(len(coordinates),1))+0.2), axis=1) # add height axis
+        pillar_boxes = np.concatenate((pillar_boxes,np.zeros(shape=(len(coordinates),1))), axis=1) # add rotation axis
+        
+        centers_conf,dims_conf,angles_conf = pillar_boxes[:, :3], pillar_boxes[:, 3:6], pillar_boxes[:, 6] # [a,b,c] -> [c,a,b] (camera to lidar coords)
+
+        centers = centers_conf + [0.0,0.0,-0.1]
+    
+    if production_mode or printConfidenceMap:
         bb_pred_guess_1_pub = rospy.Publisher("bb_pred_guess_1", BoundingBoxArray)
         header = std_msgs.msg.Header()
         header.stamp = rospy.Time.now()
@@ -779,6 +696,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
                 if i > 0:
                     t_preprocess = current_milli_time() - t_preprocess
                     t_preprocess_list.append(t_preprocess)
+                    if (len(t_preprocess_list) > 10): t_preprocess_list = t_preprocess_list[1:]
                 else:
                     t_preprocess_list.append(0.0)
 
@@ -823,22 +741,29 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
             #  Run Network 
             # ------------------------------------------------------------------------------------------------------
 
+            
             # debug
             if measure_time: t_network = current_milli_time()
 
             preds_dict = trainStep(example[0],example[1],example[2],example[6])
+            
+           
 
             # debug
             if measure_time:
                 t_network = current_milli_time() - t_network
                 t_network_list.append(t_network)
+                if (len(t_network_list) > 10): t_network_list = t_network_list[1:]
+                
+            
 
             # ------------------------------------------------------------------------------------------------------
             # Convert Network Output to predictions by applying the direction classifier to predictions of rotation 
             # use nms to get the final bboxes
             # ------------------------------------------------------------------------------------------------------
 
-            # debug
+            # 0 101 180 266
+            # debug 
             if measure_time: t_predict = current_milli_time()
 
             # t_full_sample: 23.91, t_preprocess: 0.85, t_network: 12.54, t_predict: 10.46, t_anno: 0.84, t_rviz: 0.0
@@ -849,6 +774,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
             if measure_time:
                 t_predict = current_milli_time() -t_predict
                 t_predict_list.append(t_predict)
+                if (len(t_predict_list) > 10): t_predict_list = t_predict_list[1:]
             
             # ------------------------------------------------------------------------------------------------------
             # Convert Predictions to Kitti Annotation style 
@@ -863,6 +789,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
             if measure_time:
                 t_anno = current_milli_time() -t_anno
                 t_anno_list.append(t_anno)
+                if (len(t_anno_list) > 10): t_anno_list = t_anno_list[1:]
             
             # ------------------------------------------------------------------------------------------------------
             # OPTIONAL: Send annotation to RVIZ
@@ -870,8 +797,17 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
 
             # debug
             if measure_time: t_rviz = current_milli_time()
+            
+            
+            # debug
+            # 0 101 180 266
+            debug_confidenceMap_skipFirst = 90
+            if printConfidenceMap and i >=debug_confidenceMap_skipFirst:
+                
+                confidences = np.squeeze(preds_dict["cls_preds"][...,0]).flatten()
+                send_3d_bbox(centers_conf, dims_conf, angles_conf, bb_pub_confidenceMap, header, confidences) 
 
-            if production_mode:
+            if production_mode or printConfidenceMap and i >=debug_confidenceMap_skipFirst:
         
                 dt_anno = remove_low_score(dt_anno[0], float(prediction_min_score))
                 # if len(dt_anno["score"]) > 0:
@@ -888,12 +824,15 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
                 # - the postition of bboxes in the pipeline is at the z buttom of the bb and ros needs it at the z center
                 # - TODO: lift by height/2 and not just 1.0
 
-                # centers = centers + [0.0,0.0,1.0]
+                centers = centers + [0.0,0.0,0.9]
                 send_3d_bbox(centers, dims, angles, bb_pred_guess_1_pub, header) 
+                print(i)
+                print("")
             
             # ------------------------------------------------------------------------------------------------------
             # OPTIONAL: save annotations for evaluation
             # ------------------------------------------------------------------------------------------------------
+            
             else:
                 dt_annos += dt_anno
             
@@ -901,15 +840,17 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
             if measure_time:
                 t_rviz = current_milli_time() -t_rviz
                 t_rviz_list.append(t_rviz)
+                if (len(t_rviz_list) > 10): t_rviz_list = t_rviz_list[1:]
                 t_full_sample = current_milli_time() -t_full_sample
                 t_full_sample_list.append(t_full_sample)
+                if (len(t_full_sample_list) > 10): t_full_sample_list = t_full_sample_list[1:]
                 t_preprocess = current_milli_time()
 
             # ------------------------------------------------------------------------------------------------------
             # DEBUG: Print times
             # ------------------------------------------------------------------------------------------------------
         
-            if i > 0 and measure_time: # we scipt the first network iteration (initialization)
+            if i > 0 and measure_time and i > (dataset_ori.ndata-limit_begin)//batch_size -10: # we scipt the first network iteration (initialization)
                 t_full_sample_avg = round(sum(t_full_sample_list[1:])/len(t_full_sample_list[1:]),2)
                 t_preprocess_avg = round(sum(t_preprocess_list[1:])/len(t_preprocess_list[1:]),2)
                 t_network_avg = round(sum(t_network_list[1:])/len(t_network_list[1:]),2)

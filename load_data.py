@@ -1855,24 +1855,28 @@ def sample_all(sampler_class,
                     s_points[:, :3] += info["box3d_lidar"][:3] # move the bbox in the correct position (it was centered in the file)
                     
                     # ------------------------------------------------------------------------------------------------------
-                    # Apply random trunctation in height to simulate when the object is near to camera and therefore outside the image boundaries
+                    # Apply random truncatation in height to simulate when the object is near to camera and therefore outside the image boundaries
+                    # disabled since accuracy gets worse
                     # ------------------------------------------------------------------------------------------------------
+                    # truncatee
                     
-                    sample_height_half = info["box3d_lidar"][5]/2.0 # get half size of sample
-                    truncation_weight = (2.5-sample_distance)/2.5 # calc the intensity of truncation (truncation TRUE, if sample closer than X)
-                    truncation_shift = sample_height_half*np.random.uniform(0, 1)/2
-                    fifty_fifty = bool(random.getrandbits(1))
-                    if fifty_fifty:
-                        truncation_shift*-1
-                    
-                    if(truncation_weight>0):
-                        points_z_max = np.max(s_points[:,2])
-                        points_z_min = np.min(s_points[:,2])
-                        points_z_max_new = points_z_max - sample_height_half*truncation_weight-truncation_shift
-                        points_z_min_new = points_z_min + sample_height_half*truncation_weight-truncation_shift
-                        max_filter = s_points[:,2] < points_z_max_new 
-                        min_filter = s_points[:,2] > points_z_min_new 
-                        s_points = s_points[np.logical_and(max_filter,min_filter)]
+                    bool_use_truncation =  False
+                    if bool_use_truncation:
+                        sample_height_half = info["box3d_lidar"][5]/2.0 # get half size of sample
+                        truncation_weight = (2.5-sample_distance)/2.5 # calc the intensity of truncation (truncation TRUE, if sample closer than X)
+                        truncation_shift = sample_height_half*np.random.uniform(0, 1)/2
+                        fifty_fifty = bool(random.getrandbits(1))
+                        if fifty_fifty:
+                            truncation_shift*-1
+                        
+                        if(truncation_weight>0):
+                            points_z_max = np.max(s_points[:,2])
+                            points_z_min = np.min(s_points[:,2])
+                            points_z_max_new = points_z_max - sample_height_half*truncation_weight-truncation_shift
+                            points_z_min_new = points_z_min + sample_height_half*truncation_weight-truncation_shift
+                            max_filter = s_points[:,2] < points_z_max_new 
+                            min_filter = s_points[:,2] > points_z_min_new 
+                            s_points = s_points[np.logical_and(max_filter,min_filter)]
                     
                     # points_z_mean = np.mean(s_points[:,2])
                     # points_z_max = np.max(s_points[:,2])
@@ -2017,23 +2021,30 @@ class dataLoader():
                     self.img_list_and_infos = [{}]
 
                     # ------------------------------------------------------------------------------------------------------ 
-                    # limit for training
+                    # limitt for training
                     # ------------------------------------------------------------------------------------------------------
 
-                    #limit
                     for i in self.img_list_and_infos_ori[:2400]:
                         self.img_list_and_infos.append(i)
                     for i in self.img_list_and_infos_ori[2400:3800]:
                         self.img_list_and_infos.append(i)
                     self.img_list_and_infos = self.img_list_and_infos[1:]
                     
+                    
                     # ------------------------------------------------------------------------------------------------------ 
                     # limit for transfer learning
-                    # ------------------------------------------------------------------------------------------------------
-                    
-                    # for i in self.img_list_and_infos_ori[3800:]:
+                    # # ------------------------------------------------------------------------------------------------------
+
+                    # 520
+                    # for i in self.img_list_and_infos_ori[3800:4160]:
+                    #     self.img_list_and_infos.append(i)
+                    # for i in self.img_list_and_infos_ori[4280:]:
                     #     self.img_list_and_infos.append(i)
                     # self.img_list_and_infos = self.img_list_and_infos[1:]
+                    
+                    # select just a portion of the dataset
+                    # random.shuffle(self.img_list_and_infos) # first shuffle that the selected portion has a random distribution
+                    # self.img_list_and_infos = self.img_list_and_infos[:200]
                     
         else:
             velodyne_path = self.dataset_root_path + "/testing_live" + "/velodyne" 
@@ -2074,7 +2085,7 @@ class dataLoader():
     # ==================================================
     def debug_save_points_func(self, points, message, gt_boxes=None, pillars=None):
         
-        print("DEBUG RVIZ: "+message)
+        print("DEBUG RVIZZ: "+message)
         
         self.pub_points.publish(point_cloud2.create_cloud(self.header, self.fields, points))
         
@@ -2087,11 +2098,12 @@ class dataLoader():
         if pillars is not None:
             centers,dims,angles = pillars[:, :3], pillars[:, 3:6], pillars[:, 6] # [a,b,c] -> [c,a,b] (camera to lidar coords)
 
-            centers = centers + [0.0,0.0,0.9]
+            centers = centers + [0.0,0.0,1.3]
             send_3d_bbox(centers, dims, angles, self.debug_load_data_pillars, self.header) 
             
         
         if False: print("")
+        time.sleep(0.3)                 
         
         # ------------------------------------------------------------------------------------------------------ 
         #  old functionality of this function
@@ -2596,6 +2608,7 @@ class dataLoader():
         # gt_boxes = input_dict["gt_boxes"]
         # gt_boxes = box_camera_to_lidar(gt_boxes, rect, Trv2c)
         # self.debug_save_points_func(points, "input",gt_boxes)
+        # self.debug_save_points_func(points, "input")
         gt_boxes = None
 
         if self.training:
@@ -2640,7 +2653,7 @@ class dataLoader():
 
             # debug
             
-            #if self.debug_save_points: self.debug_save_points_func(points, "input",gt_boxes)
+            if self.debug_save_points: self.debug_save_points_func(points, "input",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # filter undesired objects
@@ -2651,93 +2664,94 @@ class dataLoader():
                 [n in self.desired_objects for n in gt_names], dtype=np.bool_)
             
             
+            # ------------------------------------------------------------------------------------------------------
+            # deletee the main gt box (unsampeld one) with a likelyhood
+            # disabled since accuracy gets worse
+            # ------------------------------------------------------------------------------------------------------
+            
+            # check if a main gt box exists, firs
+            
+            bool_delete_main_gt = False
+            
+            deleteMain = False
+            if bool_delete_main_gt:
+                if len(gt_boxes)>0:
+                    
+                    # low_likelyhood = bool(random.getrandbits(1))
+                    low_likelyhood = False
+                    if low_likelyhood:
+                        deleteMain = True
+                        indices = points_in_rbbox(points, gt_boxes)
+                        indices_invert = ~np.array(indices).flatten()
+                        points = points[indices_invert]
+                
+                        gt_names = np.delete(gt_names,0,0)
+                        gt_boxes = np.delete(gt_boxes,0,0)
+                        gt_boxes_mask = np.delete(gt_boxes_mask,0,0)
+                   
+                    
+            # if self.debug_save_points: self.debug_save_points_func(points, "GT removed",gt_boxes)
+            
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly put objects sampler_class into the pc 
             # ------------------------------------------------------------------------------------------------------
 
-
-            sampled_dict = sample_all(
-                    self.sampler_class,
-                    self.dataset_root_path,
-                    gt_boxes, #shape(1,7)
-                    gt_names, #shape(1,0)
-                    self.num_point_features,
-                    self.custom_dataset,
-                    self.sample_classes,
-                    self.sample_max_nums,
-                    self.sampler_max_point_collision,
-                    self.sampler_min_point_collision,
-                    points=points,
-                    random_crop=False)
+            sampled_dict  = "empty" 
             
-            # debug
-            
-            #if self.debug_save_points: self.debug_save_points_func(points, "input",gt_boxes)
-            
-            # ------------------------------------------------------------------------------------------------------
-            # delete the main gt box (unsampeld one) with a likelyhood
-            # ------------------------------------------------------------------------------------------------------
-
-            # check if a main gt box exists, first
-            if len(gt_boxes)>0:
+            # deactivate or activate sampling (for transfer learning deactivate)
+            bool_sampling =  True
+            if bool_sampling:
                 
-                low_likelyhood = bool(random.getrandbits(1))
-                # low_likelyhood = False
-                if low_likelyhood:
-                    indices = points_in_rbbox(points, gt_boxes)
-                    indices_invert = ~np.array(indices).flatten()
-                    points = points[indices_invert]
-             
-                    gt_names = np.delete(gt_names,0,0)
-                    gt_boxes = np.delete(gt_boxes,0,0)
-                    gt_boxes_mask = np.delete(gt_boxes_mask,0,0)
-                    
-                    # dimensions = {"dimensions":dimensions[np.newaxis,:]}
-                    # img_infos["annos"].update(dimensions)
-                    # location = {"location":location[np.newaxis,:]}
-                    # img_infos["annos"].update(location)
-                    # rotation_y = {"rotation_y":rotation_y}
-                    # img_infos["annos"].update(rotation_y)
-                    
-                    img_infos["annos"]["dimensions"] = np.empty(shape = [0] + [3])
-                    img_infos["annos"]["location"] = np.empty(shape = [0] + [3])
-                    img_infos["annos"]["rotation_y"] = np.empty(shape = [0])
-                    
-                    img_infos["annos"]["alpha"] = np.empty(shape = [0])
-                    img_infos["annos"]["bbox"] = np.empty(shape = [0] + [4])
-                    img_infos["annos"]["difficulty"] = np.empty(shape = [0])
-                    img_infos["annos"]["group_ids"] = np.empty(shape = [0])
-                    img_infos["annos"]["index"] = np.empty(shape = [0])
-                    img_infos["annos"]["name"] = np.empty(shape = [0])
-                    img_infos["annos"]["num_points_in_gt"] = np.empty(shape = [0])
-                    img_infos["annos"]["occluded"] = np.empty(shape = [0])
-                    img_infos["annos"]["score"] = np.empty(shape = [0])
-                    img_infos["annos"]["truncated"] = np.empty(shape = [0])
-
-            # ------------------------------------------------------------------------------------------------------ 
-            # Concatentate annos with sampled objects 
-            # ------------------------------------------------------------------------------------------------------
-
-            if sampled_dict is not None:
-                sampled_gt_names = sampled_dict["gt_names"]
-                sampled_gt_boxes = sampled_dict["gt_boxes"]
-                sampled_points = sampled_dict["points"]
-                sampled_gt_masks = sampled_dict["gt_masks"]
-                # gt_names = gt_names[gt_boxes_mask].tolist()
-                gt_names = np.concatenate([gt_names, sampled_gt_names], axis=0)
-                # gt_names += [s["name"] for s in sampled]
-                gt_boxes = np.concatenate([gt_boxes, sampled_gt_boxes])
-                gt_boxes_mask = np.concatenate([gt_boxes_mask, sampled_gt_masks], axis=0)
+                # make sure that at least one GT is in the sample (either GT or sampled sample)
+                while( len(gt_boxes) == 0 or sampled_dict == "empty" ):
                 
-                if group_ids is not None:
-                    sampled_group_ids = sampled_dict["group_ids"]
-                    group_ids = np.concatenate([group_ids, sampled_group_ids])
+                    sampled_dict = sample_all(
+                            self.sampler_class,
+                            self.dataset_root_path,
+                            gt_boxes, #shape(1,7)
+                            gt_names, #shape(1,0)
+                            self.num_point_features,
+                            self.custom_dataset,
+                            self.sample_classes,
+                            self.sample_max_nums,
+                            self.sampler_max_point_collision,
+                            self.sampler_min_point_collision,
+                            points=points,
+                            random_crop=False)
+                    
 
-                points = np.concatenate([sampled_points, points], axis=0)
+                    # ------------------------------------------------------------------------------------------------------ 
+                    # Concatentate annos with sampled objects 
+                    # ------------------------------------------------------------------------------------------------------
+                    
+                    if sampled_dict is not None:
+                        
+                        sampled_gt_names = sampled_dict["gt_names"]
+                        sampled_gt_boxes = sampled_dict["gt_boxes"]
+                        sampled_points = sampled_dict["points"]
+                        sampled_gt_masks = sampled_dict["gt_masks"]
+                        points = np.concatenate([sampled_points, points], axis=0)
+                        # gt_names = gt_names[gt_boxes_mask].tolist()
+                        if deleteMain == True:
+                            gt_names = sampled_gt_names
+                            gt_boxes = sampled_gt_boxes
+                            gt_boxes_mask =  sampled_gt_masks
+                        else:
+                            
+                            gt_names = np.concatenate([gt_names, sampled_gt_names], axis=0)
+                            # gt_names += [s["name"] for s in sampled]
+                            gt_boxes = np.concatenate([gt_boxes, sampled_gt_boxes])
+                            gt_boxes_mask = np.concatenate([gt_boxes_mask, sampled_gt_masks], axis=0)
+                            
+                            if group_ids is not None:
+                                sampled_group_ids = sampled_dict["group_ids"]
+                                group_ids = np.concatenate([group_ids, sampled_group_ids])
 
-            # debug
+                    
+
             
-            # if self.debug_save_points: self.debug_save_points_func(points, "samples added",gt_boxes)
+            if self.debug_save_points: self.debug_save_points_func(points, "samples added",gt_boxes)
+            
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Augmentation on boxes themselves
             # ------------------------------------------------------------------------------------------------------
@@ -2763,7 +2777,7 @@ class dataLoader():
 
             # debug
             
-            # if self.debug_save_points: self.debug_save_points_func(points, "Augmentation on boxes themselves",gt_boxes)
+            if self.debug_save_points: self.debug_save_points_func(points, "Augmentation on boxes themselves",gt_boxes)
             
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly flip boxes
@@ -2773,7 +2787,7 @@ class dataLoader():
 
             # debug
             
-            # if self.debug_save_points: self.debug_save_points_func(points, "Randomly flip boxess",gt_boxes)
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly flip boxess",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly rotates the whole pointcloud including gt boxes
@@ -2784,7 +2798,7 @@ class dataLoader():
 
             # debug
             
-            # if self.debug_save_points: self.debug_save_points_func(points, "Randomly rotates the whole pointcloud including gt boxes",gt_boxes)
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly rotates the whole pointcloud including gt boxes",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly scales the whole pointcloud including gt boxes
@@ -2794,7 +2808,7 @@ class dataLoader():
             gt_boxes, points = global_scaling_v2(gt_boxes, points,*global_scaling_uniform_noise)
 
             # debug
-            # if self.debug_save_points: self.debug_save_points_func(points, "Randomly scales the whole pointcloud including gt boxes",gt_boxes)
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly scales the whole pointcloud including gt boxes",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # RANDOM / Randomly translates the whole pointcloud including gt boxes
@@ -2805,7 +2819,7 @@ class dataLoader():
 
             # debug
             
-            # if self.debug_save_points: self.debug_save_points_func(points, "Randomly translates the whole pointcloud including gt boxes",gt_boxes)
+            if self.debug_save_points: self.debug_save_points_func(points, "Randomly translates the whole pointcloud including gt boxes",gt_boxes)
 
             # ------------------------------------------------------------------------------------------------------ 
             # Filter bboxes that are ouside the range
@@ -2958,13 +2972,13 @@ class dataLoader():
             pillar_coords = coordinates[:,1:]*voxel_size[:2] 
             pillar_coords = pillar_coords[:,[1,0]] # swap x and y axis
             pillar_coords = np.concatenate((pillar_coords,np.zeros(shape=(len(coordinates),1))), axis=1) # add z axis
-            pillar_coords =  pillar_coords+(point_cloud_range[0],point_cloud_range[1],0)
+            pillar_coords =  pillar_coords+(point_cloud_range[0],point_cloud_range[1],0)# distribute pillars over real sized field
         
             pillar_boxes = np.concatenate((pillar_coords,np.zeros(shape=(len(coordinates),1))+voxel_size[0]), axis=1) # add width axis
             pillar_boxes = np.concatenate((pillar_boxes,np.zeros(shape=(len(coordinates),1))+voxel_size[1]), axis=1) # add length axis
             pillar_boxes = np.concatenate((pillar_boxes,np.zeros(shape=(len(coordinates),1))+voxel_size[2]), axis=1) # add height axis
             pillar_boxes = np.concatenate((pillar_boxes,np.zeros(shape=(len(coordinates),1))), axis=1) # add rotation axis
-            if self.debug_save_points: self.debug_save_points_func(points, "print pillars",pillars=pillar_boxes,gt_boxes=gt_boxes)
+            # if self.debug_save_points: self.debug_save_points_func(points, "print pillars",pillars=pillar_boxes,gt_boxes=gt_boxes)
             
 
         # debug stuff
