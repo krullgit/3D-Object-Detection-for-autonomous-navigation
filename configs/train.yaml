@@ -7,7 +7,7 @@ custom_dataset: True # if True, the datapipeline for the realsense 435i data is 
 
 # general train params 
 epochs_total: 260 # how many epochs to train
-load_weights: False
+load_weights: False # set true, of you want to load weights for training, kind of transfer learning
 do_evaluate: True # If True, we will do an evaluation after each epoch during training 
 
 # eval general params
@@ -18,15 +18,15 @@ eval_checkpoint: "/model_weights_48.h5" # h1:94 h2:48 # Option: [model_weights_t
 # "no_annos_mode" in "eval_input_reader" must also be set
 
 # eval production_mode params
-production_mode: False # If true  we take new pointclouds from a realsense live stream
+production_mode: True # If true  we take new pointclouds from a realsense live stream
 prediction_min_score: 0.45 # this is only used in production_mode = True # removes prediction scores lower than x
 
 # input_reader general
 cache : False  # do we have a buffer/cache (where is the difference?) // seems to overfloat the memory, so better set to False always 
 shuffle_buffer_size : 1  # set how many (shuffle_buffer_size) datapoints are in the buffer where elements are randomly selected from
 buffer_size : AUTOTUNE # how many datapoints are stored in buffer for the network / `prefetch` lets the dataset fetch batches in the background while the model is training.
-iterate_samples_in_debug_mode: True  # Allows better debugging of data_loader.py # if True no tf dataset generator is created but the point clouds are preprocessed as usual
-debug_save_points: True # if True the intermediate steps in the point cloud preprocessing are sent to rviz
+iterate_samples_in_debug_mode: False  # Allows better debugging of data_loader.py # if True no tf dataset generator is created but the point clouds are preprocessed as usual
+debug_save_points: False # if True the intermediate steps in the point cloud preprocessing are sent to rviz
 
 # Dataloader for training
 train_input_reader:
@@ -39,7 +39,7 @@ train_input_reader:
   sample_classes: ["Pedestrian"] # objects we want to randomly place inside the pointcloud 
 
   # sample_max_nums: [0] # baseline
-  sample_max_nums: [8] # [8], [0] for transferLEARNING # number of objects we want to randomly place inside the pointcloud 
+  sample_max_nums: [8] # [8] for regualat mode, [0] for transferLEARNING # number of objects we want to randomly place inside the pointcloud 
 
   sampler_max_point_collision: 500 # maximum number of points in the point cloud the sampled object can overlap (take the same 3D space)
   sampler_min_point_collision: 1 # minumum number of points in the point cloud the sampled object must overlap (take the same 3D space)
@@ -62,8 +62,8 @@ train_input_reader:
   batch_size : 2 # the batch size for training 
 
   # parameter for augmentation
-  groundtruth_rotation_uniform_noise : [-0.39269908169, 0.39269908169] # [-0.39269908169, 0.39269908169], [-0.0, 0.0] for transferLEARNING # per object 
-  groundtruth_localization_noise_std: [0.15, 0.15, 0.05] # [0.15, 0.15, 0.05], [0.0, 0.0, 0.0] for transferLEARNING# per object
+  groundtruth_rotation_uniform_noise : [-0.39269908169, 0.39269908169] # [-0.39269908169, 0.39269908169] for regualat mode, [-0.0, 0.0] for transferLEARNING # per object 
+  groundtruth_localization_noise_std: [0.15, 0.15, 0.05] # [0.15, 0.15, 0.05] for regualat mode, [0.0, 0.0, 0.0] for transferLEARNING# per object
   global_random_rotation_range_per_object: [0, 0] # whole pointcloud
   global_rotation_uniform_noise: [-0.178539816, 0.178539816] # whole pointcloud
   global_scaling_uniform_noise: [0.95, 1.05] # whole pointcloud
@@ -204,7 +204,7 @@ train_config:
     adam_optimizer:
       learning_rate:
         exponential_decay_learning_rate: 
-          initial_learning_rate: 0.002 #0.002, 0.005 for transferLEARNING # learning rate we start with
+          initial_learning_rate: 0.002 #0.002 for regualat mode, 0.005 for transferLEARNING # learning rate we start with
           decay_steps: 7000 # 4800 for batch size 2 and 2400 samples #27840 # 1856 steps per epoch * 15 epochs # TODO umrechnen auf batch_size 1
           decay_factor: 0.8
           staircase: False # if false, there will be   a smooth transition from one learning rate to the next learning rate
@@ -212,89 +212,17 @@ train_config:
   net_metrics_steps: 500 # after how many steps (batch iteration) the metrics eval must be shown
 
 
-# for transfer learning:
+######## for transfer learning:
 # in load_data set bool_sampling to False 
 # search here for "transferLEARNING" and replace as suggest
 # here, set load_weights: True
-# in train.pl replace models for loading 
-# in load_data.py uncomment #   g and comment # limit for training
-# in load_data.py disable "truncatee"
-
-# for baseline settings:
-# serach for baseline here
-# in load_data.py search "sample_height_half = info["box3d_lidar"][5]/2.0" and set false
-# in voxelnet.py set all SeparableConv2D to conv2d
-# make 
-
-
-# model 156 : 64 VFE features, 800 points per voxel
-# t_full_sample: 15.66, t_preprocess: 0.52, t_network: 10.95, t_predict: 4.22, t_anno: 0.4, t_rviz: 0.0
-
-# model 167 : 96 VFE features, 400 points per voxel
-# t_full_sample: 13.9, t_preprocess: 0.38, t_network: 10.09, t_predict: 3.31, t_anno: 0.43, t_rviz: 0.0
-
-# model 156 : 128 VFE features, 800 points per voxel
-# t_full_sample: 14.59, t_preprocess: 0.48, t_network: 10.55, t_predict: 3.53, t_anno: 0.38, t_rviz: 0.0
-
-# model 79: 128 VFE features, 200 points per voxel
-# t_full_sample: 12.38, t_preprocess: 0.37, t_network: 8.01, t_predict: 3.79, t_anno: 0.5, t_rviz: 0.0
-
-# model 192 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers
-# t_full_sample: 12.39, t_preprocess: 0.41, t_network: 6.71, t_predict: 5.19, t_anno: 0.43, t_rviz: 0.0
-
-# model 199 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,4
-# t_full_sample: 10.22, t_preprocess: 0.22, t_network: 6.67, t_predict: 3.11, t_anno: 0.44, t_rviz: 0.0
-# model 199 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,1
-# t_full_sample: 10.11, t_preprocess: 0.22, t_network: 5.44, t_predict: 4.11, t_anno: 0.44, t_rviz: 0.0
-
-# final
-# model 213_16 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,1
-# t_full_sample: 10.0, t_preprocess: 0.33, t_network: 6.33, t_predict: 3.33, t_anno: 0.11, t_rviz: 0.0
-# t_voxel_features: 451.0
-# t_spatial_features: 116.0
-# t_rpn: 149.0
-# t_nms_func: 1.66
-# model 213 : 128 VFE features, 200 points per voxel, all SeparableConv2D layers but heads, nmss= 0,4
-# t_full_sample: 9.33, t_preprocess: 0.33, t_network: 6.0, t_predict: 2.78, t_anno: 0.44, t_rviz: 0.0
-# t_voxel_features: 458.0------> ] 99 %
-# t_spatial_features: 121.0
-# t_rpn: 164.0
-# t_nms_func: 1.71
+# in train.py replace models for loading in "Load Model Weights and Optimizer Weights (Checkpoint)"
+# in load_data.py choose the transfer learning samples in "limit for transfer learning"
 
 
 
+####### IGNORE: eval experiements:
 
-# 278: 128 VFE features, 100 points per voxel, all SeparableConv2D layers but heads, nms 0.4 FM:256x320
-# t_full_sample: 17.78, t_preprocess: 0.44, t_network: 8.44, t_predict: 8.56, t_anno: 0.67, t_rviz: 0.0, 
-
-# 278: 128 VFE features, 100 points per voxel, all SeparableConv2D layers but heads, nms 0.4 FM:64X80
-# t_full_sample: 9.33, t_preprocess: 0.11, t_network: 5.33, t_predict: 3.33, t_anno: 0.44, t_rviz: 0.0
-# t_full_sample: 7.78, t_preprocess: 0.33, t_network: 5.11, t_predict: 2.0, t_anno: 0.67, t_rviz: 0.0
-# t_full_sample: 9.0, t_preprocess: 1.0, t_network: 5.0, t_predict: 3.33, t_anno: 0.67, t_rviz: 0.0
-# t_full_sample: 8.22, t_preprocess: 0.33, t_network: 6.22, t_predict: 1.56, t_anno: 0.44, t_rviz: 0.0
-
-
-
-
-# model 218 : 128 VFE features, 800 points per voxel, all SeparableConv2D layers but heads, 16x16 voxel, nmss= 0,4
-# t_voxel_features: 442.0
-# t_spatial_features: 118.0
-# t_rpn: 153.0
-# t_full_sample: 7.67, t_preprocess: 0.33, t_network: 6.0, t_predict: 1.56, t_anno: 0.0, t_rviz: 0.0
-# t_full_sample: 8.89, t_preprocess: 0.44, t_network: 5.0, t_predict: 3.56, t_anno: 0.33, t_rviz: 0.0
-
-# mention:
-# thta we probably need the same amount of samples for every new class
-# add a visulaization of how many points are optimal per voxel (show points in rviz)
-# Train in Germany, Test in The USA: Making 3D Object Detectors Generalize -> there is a nice illu with points per object
-  # compare pedestrian in kitti with one in d435i in point cloud perspective
-# show how much more pillars are occupied by point in comparison to KITTI
-# write about the test system
-# show amount of params of the network
-
-
-# a1 278: 128 VFE features, 100 points per voxel, all SeparableConv2D layers but heads, nms 0.4 FM:256x320
-# t_full_sample: 17.78, t_preprocess: 0.44, t_network: 8.44, t_predict: 8.56, t_anno: 0.67, t_rviz: 0.0, 
 
 # B2 285_26
 # t_full_sample: 9.78, t_preprocess: 0.22, t_network: 5.11, t_predict: 3.56, t_anno: 1.11, t_rviz: 0.0

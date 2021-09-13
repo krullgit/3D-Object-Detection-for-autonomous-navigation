@@ -2033,7 +2033,7 @@ class dataLoader():
                     
                     # ------------------------------------------------------------------------------------------------------ 
                     # limit for transfer learning
-                    # # ------------------------------------------------------------------------------------------------------
+                    # ------------------------------------------------------------------------------------------------------
 
                     # 520
                     # for i in self.img_list_and_infos_ori[3800:4160]:
@@ -2042,7 +2042,10 @@ class dataLoader():
                     #     self.img_list_and_infos.append(i)
                     # self.img_list_and_infos = self.img_list_and_infos[1:]
                     
+                    # ------------------------------------------------------------------------------------------------------ 
                     # select just a portion of the dataset
+                    # ------------------------------------------------------------------------------------------------------
+                    
                     # random.shuffle(self.img_list_and_infos) # first shuffle that the selected portion has a random distribution
                     # self.img_list_and_infos = self.img_list_and_infos[:200]
                     

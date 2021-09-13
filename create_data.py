@@ -167,7 +167,7 @@ def create_kitti_info_file(data_path,
     else:
         save_path = pathlib.Path(save_path)
         
-    mode = "train" # option: train, test, test_real
+    mode = "train" # option: train, test (dont use), test_real
 
     # ------------------------------------------------------------------------------------------------------ 
     #  Train
@@ -194,7 +194,7 @@ def create_kitti_info_file(data_path,
             pickle.dump(kitti_infos_train, f,2)
         
     # ------------------------------------------------------------------------------------------------------ 
-    #  test fake anno
+    #  test fake anno, not used anymore
     # ------------------------------------------------------------------------------------------------------
 
     if mode == "test":
@@ -212,7 +212,6 @@ def create_kitti_info_file(data_path,
         with open(filename, 'wb') as f:
             pickle.dump(kitti_infos_val, f,2)
         
-        
     # ------------------------------------------------------------------------------------------------------ 
     #  test real anno
     # ------------------------------------------------------------------------------------------------------
@@ -228,7 +227,7 @@ def create_kitti_info_file(data_path,
             image_ids=val_img_ids,
             relative_path=relative_path)
         _calculate_num_points_in_gt(data_path, kitti_infos_val, relative_path)
-        filename = save_path / 'kitti_infos_val.pkl'
+        filename = save_path / 'kitti_infos_val_sampled.pkl'
         print(f"Kitti info val file is saved to {filename}")
         with open(filename, 'wb') as f:
             pickle.dump(kitti_infos_val, f,2)
@@ -385,7 +384,7 @@ def create_groundtruth_database(data_path,
     root_path = pathlib.Path(data_path)
     if info_path is None:
         if sample_val_dataset_mode:
-            info_path = root_path / 'kitti_infos_val.pkl'
+            info_path = root_path / 'kitti_infos_val_sampled.pkl'
         else:
             info_path = root_path / 'kitti_infos_train.pkl'
     if database_save_path is None:

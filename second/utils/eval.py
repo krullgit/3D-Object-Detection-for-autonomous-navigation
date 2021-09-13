@@ -272,6 +272,7 @@ def compute_statistics_jit(overlaps,
         fp -= nstuff
         if compute_aos:
             tmp = np.zeros((fp + delta_idx, ))
+            
             # tmp = [0] * fp
             for i in range(delta_idx):
                 tmp[i + fp] = (1.0 + np.cos(delta[i])) / 2.0
@@ -742,9 +743,6 @@ def do_eval_v2(gt_annos,
     mAP_3d = get_mAP_v2(ret["precision"])
     evaluation_detailed["precision_3d"] = ret["precision"]
 
-
-    with open("/home/makr/Documents/uni/TU/3.Master/experiments/own/tf_3dRGB_pc/out/model_496/out_dir_checkpoints/model_result_21_detailed.h5", "wb") as file: 
-        pickle.dump(evaluation_detailed, file)
 
 
     # ------------------------------------------------------------------------------------------------------

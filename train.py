@@ -643,7 +643,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
     # ROS setup, in case the prediction should be sent to rviz
     # ------------------------------------------------------------------------------------------------------
     
-    printConfidenceMap = True # also set debug_save_points in train.yaml to True
+    printConfidenceMap = False # also set debug_save_points in train.yaml to True
     if printConfidenceMap:
         bb_pub_confidenceMap = rospy.Publisher("bb_pub_confidenceMap", BoundingBoxArray)
         header = std_msgs.msg.Header()
@@ -692,7 +692,7 @@ def evaluate(config_path, model_id=None, from_file_mode = False, epoch_idx=None)
         if i >= limit_begin and example[0].shape[0]>1:
             
             # debug measure time
-            if measure_time: 
+            if measure_time:
                 if i > 0:
                     t_preprocess = current_milli_time() - t_preprocess
                     t_preprocess_list.append(t_preprocess)
